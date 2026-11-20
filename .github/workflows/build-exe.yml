@@ -95,7 +95,8 @@ jobs:
         id: zip
         shell: pwsh
         run: |
-          $zip = "情绪周期系统-windows-x64-${{ steps.ver.outputs.LABEL }}.zip"
+          # 文件名必须用 ASCII：GitHub 会静默丢掉附件名里的中文，变成 "-windows-x64.zip"
+          $zip = "emotion-cycle-system-windows-x64-${{ steps.ver.outputs.LABEL }}.zip"
           # 用 .NET 压缩并显式写入 UTF-8 文件名，避免 Windows 自带解压乱码
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           [System.IO.Compression.ZipFile]::CreateFromDirectory(
