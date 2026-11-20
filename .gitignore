@@ -1,0 +1,24 @@
+# ---- 数据缓存：体积大（约 90MB+），不进仓库，首次运行自动重新下载 ----
+data/cache/
+
+# ---- 报告产物：每次运行都会重新生成 ----
+reports/
+
+# ---- 打包中间产物 ----
+build/
+dist/
+build_test/
+*.spec.bak
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini

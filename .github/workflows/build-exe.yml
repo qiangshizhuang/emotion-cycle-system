@@ -1,0 +1,129 @@
+name: 构建 Windows EXE
+
+# 触发方式
+#   1) 手动：Actions 页面 → 构建 Windows EXE → Run workflow
+#   2) 打标签：git tag v1.0 && git push origin v1.0 → 自动构建并发布 Release
+on:
+  workflow_dispatch:
+    inputs:
+      make_release:
+        description: "构建完成后发布 Release（生成免登录的公开下载链接）"
+        type: boolean
+        default: true
+  push:
+    tags:
+      - "v*"
+
+# 同一分支重复触发时，取消上一次未完成的构建
+concurrency:
+  group: build-exe-${{ github.ref }}
+  cancel-in-progress: true
+
+# 发布 Release 需要写权限
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Windows x64 打包
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 3.11 (x64)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: "x64"
+
+      - name: 缓存 pip 下载
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          python -c "import pandas, numpy, pyarrow, akshare; print('依赖版本', pandas.__version__, numpy.__version__, akshare.__version__)"
+
+      # 打包前先在源码状态下自检，把「依赖装漏」和「代码有问题」区分开
+      - name: 自检（源码状态）
+        run: python app.py --selftest
+
+      - name: PyInstaller 打包
+        run: python -m PyInstaller build.spec --noconfirm --clean
+
+      - name: 附上可编辑的配置与说明
+        shell: pwsh
+        run: |
+          $dst = "dist\情绪周期系统"
+          Copy-Item config.py "$dst\config.py"
+          Copy-Item README.md "$dst\使用说明.md"
+          if (Test-Path "打包说明.md") { Copy-Item "打包说明.md" "$dst\打包说明.md" }
+          New-Item -ItemType Directory -Force -Path "$dst\data\cache" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$dst\reports" | Out-Null
+          Get-ChildItem $dst | Select-Object Name, Length
+
+      # 关键一步：真的把打好的 exe 跑一次，缺模块会在这里直接失败
+      - name: 自检（打包后的 exe）
+        shell: pwsh
+        run: |
+          $exe = "dist\情绪周期系统\情绪周期系统.exe"
+          if (-not (Test-Path $exe)) { throw "没有生成 exe" }
+          & $exe --selftest
+          if ($LASTEXITCODE -ne 0) { throw "exe 自检失败，退出码 $LASTEXITCODE" }
+
+      - name: 压缩为 zip
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_type }}" -eq "tag"
+          $ver = if ($tag) { "${{ github.ref_name }}" } else { "latest" }
+          $zip = "情绪周期系统-windows-x64-$ver.zip"
+          # 用 .NET 压缩并显式写入 UTF-8 文件名，避免 Windows 自带解压乱码
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            (Resolve-Path "dist\情绪周期系统").Path,
+            (Join-Path (Get-Location).Path $zip),
+            [System.IO.Compression.CompressionLevel]::Optimal,
+            $false,
+            [System.Text.Encoding]::UTF8)
+          "ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Get-Item $zip | Select-Object Name, @{n = "MB"; e = { [math]::Round($_.Length / 1MB, 1) } }
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: 情绪周期系统-windows-x64
+          path: ${{ env.ZIP }}
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: 发布 Release
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.make_release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
+          name: 情绪周期系统 ${{ github.ref_type == 'tag' && github.ref_name || format('构建 #{0}', github.run_number) }}
+          body: |
+            Windows x64 免安装版，解压即用，无需安装 Python。
+
+            - 解压后双击 `情绪周期系统.exe`
+            - 首次运行需联网下载全市场数据（约 5~8 分钟），之后每次 30~60 秒
+            - 想调参数：用记事本改同目录下的 `config.py`
+          files: ${{ env.ZIP }}
+          draft: false
+          prerelease: false
+
+      - name: 汇总
+        shell: pwsh
+        run: |
+          "### 构建完成`n- 产物：``${{ env.ZIP }}```n- 下载：本页 Artifacts（需登录）或 Releases 页面（公开链接，可转发）" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

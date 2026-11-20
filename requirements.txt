@@ -1,0 +1,6 @@
+# 运行时依赖（云端打包与本地运行共用）
+pandas>=2.0,<4
+numpy>=1.24,<3
+pyarrow>=14
+akshare>=1.14
+requests>=2.28
