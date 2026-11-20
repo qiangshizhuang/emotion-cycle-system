@@ -2,5 +2,9 @@
 pandas>=2.0,<4
 numpy>=1.24,<3
 pyarrow>=14
-akshare>=1.14
 requests>=2.28
+
+# akshare 锁定：1.20.46 起官方把新浪接口改了名（stock_zh_a_spot -> stock_zh_a_spot_sina），
+# 且新接口返回列有变动。代码里 data/akcompat.py 做了新旧自动切换，
+# 但发行版 exe 固定在这个已验证过的版本上，行为最可预期。
+akshare==1.18.22

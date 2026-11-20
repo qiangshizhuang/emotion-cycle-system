@@ -91,15 +91,18 @@ def _selftest():
         return f"pyarrow {pyarrow.__version__}"
 
     def _akshare():
-        import akshare as ak
         import importlib
-        # 这三个是整个系统真正用到的接口。akshare 大量走 __getattr__ 动态导入，
-        # 打包后最容易在这里缺模块，所以要真的摸一遍并回导它所属的模块。
-        for fn in ("stock_zh_a_spot", "stock_zh_a_daily", "stock_zh_index_daily"):
-            f = getattr(ak, fn)
-            assert callable(f), f"缺少接口 {fn}"
-            importlib.import_module(f.__module__)
-        return f"akshare {ak.__version__}"
+        import akshare as ak
+        from data import akcompat
+
+        # 走兼容层解析，测的就是程序运行时真正调用的那条路径。
+        # akshare 在 1.20.46 改过接口名，写死名字会让自检本身变成误报。
+        ver, got = akcompat.describe()
+        for name in got.values():
+            fn = getattr(ak, name)
+            assert callable(fn), f"接口不可用：{name}"
+            importlib.import_module(fn.__module__)  # 打包后最容易缺的是这些动态导入
+        return f"akshare {ver} / {got['spot']}"
 
     def _core_logic():
         """用合成数据跑一遍核心链路，验证指标/打分/状态机没被裁坏。"""

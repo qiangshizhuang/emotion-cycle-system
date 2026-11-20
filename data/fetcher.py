@@ -34,8 +34,8 @@ def get_stock_list(use_cache=True):
     if use_cache and os.path.exists(p) and (time.time() - os.path.getmtime(p) < 86400 * 3):
         return pd.read_csv(p, dtype={"code": str})
 
-    import akshare as ak
-    spot = ak.stock_zh_a_spot()
+    from data import akcompat
+    spot = akcompat.spot()
     spot = spot.rename(columns={"代码": "code", "名称": "name"})
     spot["code"] = spot["code"].astype(str)
     # 只保留沪深（剔除 bj），主板+创业板+科创板
@@ -51,10 +51,10 @@ def get_stock_list(use_cache=True):
 
 
 def _fetch_one(code, start, end, retries=3):
-    import akshare as ak
+    from data import akcompat
     for i in range(retries):
         try:
-            d = ak.stock_zh_a_daily(symbol=code, start_date=start, end_date=end, adjust="")
+            d = akcompat.daily(code, start, end, adjust="")
             if d is None or len(d) == 0:
                 return None
             d = d.copy()

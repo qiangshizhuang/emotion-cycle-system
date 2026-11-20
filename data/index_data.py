@@ -13,9 +13,9 @@ INDEXES = {"sh000001": "上证指数", "sz399006": "创业板指"}
 
 
 def fetch_index(symbol="sh000001", start=None, end=None):
-    import akshare as ak
+    from data import akcompat
     p = os.path.join(CACHE_DIR, f"index_{symbol}.parquet")
-    df = ak.stock_zh_index_daily(symbol=symbol)
+    df = akcompat.index_daily(symbol)
     df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
     df = df[["date", "open", "high", "low", "close", "volume"]]
     df.to_parquet(p, index=False)
