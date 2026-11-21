@@ -9,6 +9,17 @@
 
 ---
 
+## 下载（Windows，不用装 Python）
+
+**[⬇ 下载 v1.0 免安装版](https://github.com/qiangshizhuang/emotion-cycle-system/releases/download/v1.0/emotion-cycle-system-windows-x64-v1.0.zip)** · 73MB
+
+下载 → 解压 → 双击 `情绪周期系统.exe`。首次运行会自动下载全市场数据（5~8 分钟），之后每次 30~60 秒出报告。
+
+> **代码列表里没有 exe 是正常的。** 编译产物不进 git 仓库，而是每次由 GitHub 的 Windows 服务器现编译，成品放在页面右侧的 **Releases** 里。
+> 打不开上面的链接，就点仓库首页右边的 `Releases` → `v1.0` → 下载 zip 附件。
+
+---
+
 ## 一、快速开始
 
 ```bash
