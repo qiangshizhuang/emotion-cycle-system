@@ -45,6 +45,16 @@ try:
 except NameError:
     _HERE = os.getcwd()
 
+# 内置数据快照：首次运行秒级载入，免去 5223 只股票逐只下载的 6~8 分钟。
+# 没有这个目录也能打包，只是用户首次运行时得在线全量下载。
+_seed_dir = os.path.join(_HERE, "data_seed")
+_seed_files = []
+if os.path.isdir(_seed_dir):
+    for fn in sorted(os.listdir(_seed_dir)):
+        if fn.endswith((".parquet", ".csv")):
+            datas.append((os.path.join(_seed_dir, fn), "data_seed"))
+            _seed_files.append(fn)
+
 icon_path = os.path.join(_HERE, "icon.ico")
 if not os.path.exists(icon_path):
     icon_path = None
@@ -62,6 +72,8 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
+print(f"[build.spec] 内置数据文件 {len(_seed_files)} 个：{_seed_files}")
 
 pyz = PYZ(a.pure)
 

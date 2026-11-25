@@ -65,6 +65,15 @@ jobs:
           python -c "import pandas, numpy, pyarrow, akshare; print('deps', pandas.__version__, numpy.__version__, akshare.__version__)"
 
       # 打包前先在源码状态下自检，把「依赖装漏」和「代码有问题」区分开
+      - name: 确认内置数据已就位
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "data_seed\daily_all.parquet")) {
+            throw "缺少 data_seed\daily_all.parquet —— 没有它，用户首次运行要在线下载 6~8 分钟"
+          }
+          $mb = [math]::Round((Get-Item "data_seed\daily_all.parquet").Length / 1MB, 1)
+          "内置数据 $mb MB" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
       - name: 自检（源码状态）
         run: python app.py --selftest
 
@@ -81,6 +90,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$dst\data\cache" | Out-Null
           New-Item -ItemType Directory -Force -Path "$dst\reports" | Out-Null
           Get-ChildItem $dst | Select-Object Name, Length
+
+      - name: 确认数据已打进包内
+        shell: pwsh
+        run: |
+          $seed = "dist\情绪周期系统\_internal\data_seed"
+          if (-not (Test-Path $seed)) { throw "包内没有 _internal\data_seed，首次运行会被迫在线下载" }
+          Get-ChildItem $seed | Select-Object Name, @{n = "MB"; e = { [math]::Round($_.Length / 1MB, 1) } }
 
       # 关键一步：真的把打好的 exe 跑一次，缺模块会在这里直接失败
       - name: 自检（打包后的 exe）
@@ -124,9 +140,15 @@ jobs:
           name: ${{ steps.ver.outputs.TITLE }}
           body: |
             Windows x64 免安装版，解压即用，不需要安装 Python。
-            解压后双击「情绪周期系统.exe」。
-            首次运行需联网下载全市场数据，约 5 到 8 分钟；之后每次 30 到 60 秒。
-            想调参数：用记事本改同目录下的 config.py。
+
+            **解压后双击「情绪周期系统.exe」即可，首次运行约 20~40 秒出报告。**
+
+            包内已内置截至打包日的全市场日线（5223 只 / 470 万行），
+            首次运行直接从包内复制，不再下载历史数据，只补最近几个交易日。
+
+            - 换电脑：整个文件夹一起拷，不需要装 Python
+            - 想调参数：用记事本改同目录下的 config.py
+            - 数据过期：启动时会自动增量补齐，带进度条，超时自动先用现有数据出报告
           files: ${{ steps.zip.outputs.ZIP }}
           draft: false
           prerelease: false

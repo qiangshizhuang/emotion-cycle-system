@@ -16,7 +16,7 @@ from core import metrics, score, cycle
 OUT_DIR = runtime.reports_dir()
 
 
-def run(start=None, end=None, verbose=True, auto_update=True):
+def run(start=None, end=None, verbose=True, auto_update=True, budget=None):
     t0 = time.time()
 
     def log(m):
@@ -24,9 +24,9 @@ def run(start=None, end=None, verbose=True, auto_update=True):
             print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
 
     log("① 加载全市场日线 ...")
-    daily = fetcher.load(start, end, auto_update=auto_update)
+    daily = fetcher.load(start, end, auto_update=auto_update, budget=budget)
     sl = fetcher.get_stock_list()
-    log(f"    {len(daily):,} 行 / {daily['code'].nunique()} 只")
+    log(f"    {len(daily):,} 行 / {daily['code'].nunique()} 只，截至 {daily['date'].max()}")
 
     log("② 标注涨跌停 / 连板 ...")
     flags = metrics.build_daily_flags(daily, sl)

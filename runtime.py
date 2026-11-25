@@ -35,6 +35,23 @@ def cache_dir():
     return p
 
 
+def seed_dir():
+    """
+    内置数据快照目录（只读）。
+
+    打包时把一份「截至发布日的全市场日线」塞进包里，首次运行直接拷出来用，
+    省掉 5~8 分钟的逐股下载。这是让「双击就能出报告」成立的关键——
+    新浪接口按股票逐只抓、且并发高了会被限流，5223 只无论怎么优化都要几分钟。
+
+    找不到就返回 None，调用方退回在线全量下载。
+    """
+    for base in (res_dir(), app_dir()):
+        p = os.path.join(base, "data_seed")
+        if os.path.isdir(p):
+            return p
+    return None
+
+
 def reports_dir():
     p = os.path.join(app_dir(), "reports")
     os.makedirs(p, exist_ok=True)
@@ -59,3 +76,27 @@ def load_external_config():
     except Exception:
         sys.modules.pop("config", None)
         return False
+
+
+def silence_noise():
+    """
+    压掉第三方库的干扰输出。
+
+    akshare 依赖的 py_mini_racer 在请求失败时，__del__ 会抛 AttributeError 并打到 stderr，
+    用户看到的是满屏 traceback，会以为程序崩了。这里把析构改成静默，
+    真正的错误仍会通过正常的异常链暴露。
+    """
+    try:
+        import py_mini_racer
+        cls = getattr(py_mini_racer, "MiniRacer", None)
+        if cls is not None:
+            def _safe_del(self):
+                try:
+                    ext = getattr(self, "ext", None)
+                    if ext is not None:
+                        ext.mr_free_context(getattr(self, "ctx", None))
+                except Exception:
+                    pass
+            cls.__del__ = _safe_del
+    except Exception:
+        pass

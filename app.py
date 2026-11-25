@@ -135,6 +135,20 @@ def _selftest():
         assert done["phase_name"].tail(1).notna().all(), "阶段判定未生效"
         return f"{len(done)} 个交易日 / 涨停均值 {done['zt_count'].mean():.1f}"
 
+    def _seed():
+        """内置数据快照：这是首次运行免下载的关键，打包后必须存在。"""
+        import pandas as pd
+        import runtime
+        seed = runtime.seed_dir()
+        if seed:
+            f = os.path.join(seed, "daily_all.parquet")
+            assert os.path.exists(f), "快照目录存在但缺 daily_all.parquet"
+            d = pd.read_parquet(f, columns=["date"])
+            return f"{len(d):,} 行，覆盖至 {d['date'].max()}"
+        if runtime.is_frozen():
+            raise AssertionError("包内没有数据快照，用户首次运行要在线下载 6~8 分钟")
+        return "源码模式，无快照（正常）"
+
     def _render():
         from output import charts
         svg = charts.line_chart(["2024-01-01", "2024-01-02"], [([1, 2], "#fff", "t", 2)])
@@ -145,6 +159,7 @@ def _selftest():
     check("目录可写", _dirs)
     check("numpy / pandas", _numpy_pandas)
     check("parquet 读写", _parquet)
+    check("内置数据快照", _seed)
     check("akshare 接口", _akshare)
     check("核心计算链路", _core_logic)
     check("SVG 渲染", _render)
@@ -182,6 +197,7 @@ def main():
 
     import runtime
     runtime.load_external_config()      # 允许 exe 同目录的 config.py 覆盖参数
+    runtime.silence_noise()             # 压掉 py_mini_racer 的析构噪音
 
     import config
     from data import fetcher
@@ -203,19 +219,26 @@ def main():
             print(f"      导入 {len(df):,} 行 / {df['code'].nunique()} 只股票\n")
 
         if args.full:
-            print("[0/3] 强制全量重抓数据...")
+            print("[0/3] 强制全量重抓数据（会重新下载全部历史，约 6 分钟）...")
             fetcher.update(args.end, full=True)
 
-        first_run = not os.path.exists(fetcher.DAILY_CACHE)
-        if first_run and not args.no_update:
-            print("[1/3] 首次运行：需要下载全部沪深 A 股约 4 年日线")
-            print("       约 5000 只股票、470 万行数据，预计 5~8 分钟")
-            print("       期间请勿关闭窗口，下载完会缓存，以后每次只需几十秒\n")
-        else:
-            print("[1/3] 更新数据...")
+        # 有内置快照就不必干等下载；没有才走在线全量
+        has_cache = os.path.exists(fetcher.DAILY_CACHE)
+        seed = runtime.seed_dir()
+        print("[1/3] 准备数据")
+        if has_cache:
+            pass
+        elif seed and os.path.exists(os.path.join(seed, "daily_all.parquet")):
+            print("  首次运行：从内置数据快照载入（本地复制，秒级完成）")
+        elif not args.no_update:
+            print("  首次运行：包内没有数据快照，需要在线下载全部沪深 A 股约 4 年日线")
+            print("  约 5223 只、470 万行，预计 6~8 分钟，进度见下方进度条")
+            print("  下载完会缓存，以后每次运行只补最近几个交易日\n")
 
         t0 = time.time()
-        sent, stats, trans = run(start=None, end=args.end, auto_update=not args.no_update)
+        sent, stats, trans = run(start=None, end=args.end,
+                                 auto_update=not args.no_update,
+                                 budget=None if args.no_update else config.UPDATE_BUDGET)
 
         print("\n[3/3] 生成报告...")
         stamp = sent["date"].iloc[-1].replace("-", "")

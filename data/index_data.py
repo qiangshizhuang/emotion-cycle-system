@@ -22,10 +22,28 @@ def fetch_index(symbol="sh000001", start=None, end=None):
     return df
 
 
-def load_index(symbol="sh000001"):
+def load_index(symbol="sh000001", refresh=True):
+    """
+    读取指数日线；缓存落后于今天时自动重抓一次。
+
+    这一步不能省：交易日历（align_trade_day）依赖它判断「今天收盘了没」，
+    指数缓存不刷新就会永远停在旧日期，收盘后运行也补不上当天数据。
+    """
+    import time
     p = os.path.join(CACHE_DIR, f"index_{symbol}.parquet")
     if os.path.exists(p):
-        return pd.read_parquet(p)
+        df = pd.read_parquet(p)
+        if not refresh:
+            return df
+        today = time.strftime("%Y-%m-%d")
+        stale = df["date"].max() < today
+        # 1 小时节流，避免短时间内反复请求
+        if stale and (time.time() - os.path.getmtime(p)) > 3600:
+            try:
+                return fetch_index(symbol)
+            except Exception:
+                return df
+        return df
     return fetch_index(symbol)
 
 
