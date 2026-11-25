@@ -73,7 +73,7 @@ a = Analysis(
     optimize=0,
 )
 
-print(f"[build.spec] 内置数据文件 {len(_seed_files)} 个：{_seed_files}")
+print(f"[build.spec] seed files: {len(_seed_files)} -> {_seed_files}")
 
 pyz = PYZ(a.pure)
 

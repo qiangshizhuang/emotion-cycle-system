@@ -398,8 +398,13 @@ def load(start=None, end=None, auto_update=True, budget=None):
         df = update(start, end, budget=budget)
     elif os.path.exists(DAILY_CACHE):
         df = pd.read_parquet(DAILY_CACHE)
+    elif _install_seed():
+        # 离线模式且没有缓存：用内置快照，这是 exe 首次运行的常见路径
+        df = pd.read_parquet(DAILY_CACHE)
     else:
-        df = update(start, end, full=True)
+        raise RuntimeError(
+            "本地没有数据，包内也没有内置快照。请去掉 --no-update 联网运行一次。"
+        )
     return df[(df["date"] >= start) & (df["date"] <= end)].copy()
 
 
