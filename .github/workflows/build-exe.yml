@@ -65,6 +65,18 @@ jobs:
           python -c "import pandas, numpy, pyarrow, akshare; print('deps', pandas.__version__, numpy.__version__, akshare.__version__)"
 
       # 打包前先在源码状态下自检，把「依赖装漏」和「代码有问题」区分开
+      # 数据快照存在 data-seed 这个 Release 里，不放 git：
+      # 72MB parquet 走 git push 会在传输阶段断连，Release 上传通道稳定得多
+      - name: 下载内置数据快照
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          New-Item -ItemType Directory -Force -Path "data_seed" | Out-Null
+          gh release download data-seed --pattern "*.parquet" --dir data_seed --clobber
+          gh release download data-seed --pattern "*.csv" --dir data_seed --clobber
+          Get-ChildItem data_seed | Select-Object Name, @{n = "MB"; e = { [math]::Round($_.Length / 1MB, 1) } }
+
       - name: 确认内置数据已就位
         shell: pwsh
         run: |
