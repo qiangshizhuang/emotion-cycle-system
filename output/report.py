@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """HTML 仪表盘生成"""
 import os
+import time
 import pandas as pd
 import numpy as np
 
@@ -66,6 +67,18 @@ tbody tr:hover{background:#161b22}
 footer{color:#484f58;font-size:11.5px;border-top:1px solid #21262d;padding-top:16px;line-height:1.9}
 footer b{color:#6e7681}
 .tag{font-size:11px;padding:2px 7px;border-radius:4px;background:#21262d;color:#8b949e;margin-left:6px}
+.tier{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+@media(max-width:980px){.tier{grid-template-columns:repeat(2,1fr)}}
+.seg{background:#0d1219;border:1px solid #21262d;border-radius:8px;padding:13px 14px;opacity:.45;
+     transition:.18s;position:relative}
+.seg .rng{font-size:11.5px;color:#8b949e;letter-spacing:.3px}
+.seg .act{font-size:19px;font-weight:700;margin:5px 0 3px;line-height:1.15}
+.seg .why{font-size:11px;color:#6e7681;line-height:1.5}
+.seg.on{opacity:1;box-shadow:0 0 0 1px currentColor inset;background:#131b25}
+.stale{background:#2a1c1c;border:1px solid #7a3030;color:#ffb3a7;border-radius:8px;
+       padding:11px 14px;font-size:12.5px;margin-bottom:18px;line-height:1.7}
+.stale b{color:#ff7a6a}
+.fresh{font-size:11.5px;color:#3fb950}
 """
 
 
@@ -134,13 +147,13 @@ def build_html(sent, stats, out_path, trans=None):
     # 关键指标
     kpis = [
         ("涨停家数", f"{int(last['zt_count'])}", f"前值 {int(prev['zt_count'])}　分位 {last['zt_pct']:.0f}%", "#f0544c"),
-        ("跌停家数", f"{int(last['dt_count'])}", f"前值 {int(prev['dt_count'])}　分位 {last['dt_pct']:.0f}%", "#2ea88a"),
+        ("跌停家数", f"{int(last['dt_count'])}", f"门槛 60 / 150 / 400", "#2ea88a"),
         ("最高连板", f"{int(last['max_board'])} 板", f"连板股 {int(last['board2'])} 只", "#e8a33d"),
         ("封板率", f"{last['seal_rate']*100:.0f}%" if pd.notna(last['seal_rate']) else "—",
          f"炸板 {int(last['zb_count'])} 只", "#c9d1d9"),
         ("昨涨停溢价", f"{last['prem']:+.2f}%" if pd.notna(last['prem']) else "—",
          f"红盘率 {last['prem_win']:.0f}%" if pd.notna(last['prem_win']) else "", "#f0544c" if (pd.notna(last['prem']) and last['prem'] > 0) else "#2ea88a"),
-        ("大面数", f"{int(last['big_loss'])}", f"跌超7%未跌停", "#2ea88a"),
+        ("大面数", f"{int(last['big_loss'])}", f"辅助门槛 400", "#2ea88a"),
         ("两市成交", f"{last['amount_yi']:,.0f} 亿", f"20日均量比 {last['amt_ratio']:.2f}", "#c9d1d9"),
         ("上证指数", f"{last['idx_close']:,.0f}" if pd.notna(last.get('idx_close', np.nan)) else "—",
          f"当日 {last['idx_pct']:+.2f}%" if pd.notna(last['idx_pct']) else "", "#f0544c" if (pd.notna(last['idx_pct']) and last['idx_pct'] > 0) else "#2ea88a"),
@@ -149,6 +162,101 @@ def build_html(sent, stats, out_path, trans=None):
         f'<div class="kpi"><div class="label">{k}</div><div class="val num" style="color:{c}">{v}</div>'
         f'<div class="sub num">{s}</div></div>' for k, v, s, c in kpis
     )
+
+    # ---- 跌停家数分级：这是判断「冰点能不能买」的唯一刻度 ----
+    dt_n, bl_n = int(last["dt_count"]), int(last["big_loss"])
+    TIERS = [
+        ("0 ~ 59 家", "0~1 成", "没触发，空仓等", "#3a4759", 0),
+        ("60 ~ 149 家", "2~3 成", "20 次 · T+20 +6.86% · 胜率 75%", "#3fb950", 60),
+        ("150 ~ 399 家", "5~6 成", "8 次 · T+20 +13.32% · 8 次全赚", "#e8a33d", 150),
+        ("≥ 400 家", "8 成", "4 次 · T+20 +15.04% · 最差 +8.1%", "#f0544c", 400),
+    ]
+
+    def _tier_of(dtv, blv):
+        if dtv >= 400:
+            return 3
+        if dtv >= 150:
+            return 2
+        if dtv >= 60 or blv >= 400:
+            return 1          # 大面 400 家 ≈ 一级的量级，仓位同样是 2 成
+        return 0
+
+    cur = _tier_of(dt_n, bl_n)
+
+    # 崩盘后的建仓窗口：恐慌当天没买，不等于第二天就不该有仓位。
+    # 跌停潮次日家数立刻消失，只看当天会把「已经建好的仓」判成空仓，来回打脸。
+    LOOKBACK = 10
+    last_hit = None
+    for _, r0 in d.tail(LOOKBACK).iloc[::-1].iterrows():
+        t0 = _tier_of(int(r0["dt_count"]), int(r0["big_loss"]))
+        if t0 > 0:
+            last_hit = (str(r0["date"]), t0, int(r0["dt_count"]), int(r0["big_loss"]))
+            break
+    win_tier = last_hit[1] if last_hit else 0
+    show_tier = cur if cur > 0 else win_tier
+    hit_days = 0
+    if show_tier > 0:
+        hit_days = len(d) - 1 - d.index[d["date"] == last_hit[0]][0] if last_hit else 0
+
+    tier_html = ""
+    for i, (rng, act, why, col, _) in enumerate(TIERS):
+        on = (i == show_tier and show_tier > 0)
+        badge = ""
+        if on:
+            badge = ('<span style="position:absolute;top:-9px;right:10px;font-size:10px;font-weight:700;'
+                     f'background:{col};color:#0b0e14;padding:1px 6px;border-radius:3px;letter-spacing:.4px">'
+                     f'{"今天" if cur > 0 else f"{-hit_days}日前"}</span>')
+        tier_html += (f'<div class="seg{" on" if on else ""}" style="color:{col};position:relative">'
+                      f'{badge}<div class="rng">{rng}</div><div class="act">{act}</div>'
+                      f'<div class="why">{why}</div></div>')
+
+    if cur == 3:
+        gap_txt = "已在最高档，历史仅 4 次"
+    elif cur > 0:
+        gap_txt = f"再增 <b>{TIERS[cur + 1][4] - dt_n}</b> 家跌停进下一档"
+    elif win_tier > 0:
+        gap_txt = f"恐慌已过去 {hit_days} 个交易日"
+    else:
+        gap_txt = "近 10 日没有触发"
+
+    if cur == 3:
+        verdict = (f'<b style="color:#f0544c">三级触发</b>：跌停 {dt_n} 家，千股跌停，打到 <b>8 成</b>。'
+                   f'留 2 成现金，持有 20 个交易日，不要做短线。')
+    elif cur == 2:
+        verdict = (f'<b style="color:#e8a33d">二级触发</b>：跌停 {dt_n} 家，全系统赔率最好的位置，'
+                   f'加到 <b>5~6 成</b>。历史 8 次，20 个交易日后全部为正。')
+    elif cur == 1:
+        verdict = (f'<b style="color:#3fb950">一级触发</b>：跌停 {dt_n} 家 / 大面 {bl_n} 家，建底仓 <b>2~3 成</b>。'
+                   f'别一次打满，{gap_txt}就加到 5~6 成。')
+    elif win_tier > 0:
+        verdict = (f'<b style="color:#3fb950">建仓窗口内（{hit_days} 个交易日前的恐慌已触发）</b>：'
+                   f'今天跌停只剩 <b>{dt_n}</b> 家、大面 <b>{bl_n}</b> 家，恐慌退去，但仓位<b>不是清零而是维持</b>——'
+                   f'上一档给的是 {TIERS[win_tier][1]}，现在<b>持有不动</b>，不加也不减。<br>'
+                   f'加仓要等两件事之一：① 跌停重新回到 {TIERS[win_tier][4]} 家以上（二次探底，那是更好的机会）；'
+                   f'② 涨停站上 80 家、封板率回到 65% 以上、溢价连续 3 日为正（修复确认，按趋势仓位做）。'
+                   f'10 个交易日后仍无其一，仓位退回 1~2 成。')
+    else:
+        verdict = (f'<b>全场空仓等待</b>：跌停 {dt_n} 家、大面 {bl_n} 家都没到门槛，近 10 日也没触发过。'
+                   f'这个状态后 20 日平均只 +0.4%，不值得赌。')
+
+
+    # 数据新鲜度
+    today = time.strftime("%Y-%m-%d")
+    hm = time.strftime("%H:%M")
+    last_day = str(last["date"])
+    gap_nat = (pd.Timestamp(today) - pd.Timestamp(last_day)).days
+    if last_day == today:
+        fresh_html = '<span class="fresh">● 已更新至今日收盘</span>'
+        stale_html = ""
+    elif pd.Timestamp(today).weekday() < 5 and hm >= "15:10" and gap_nat <= 3:
+        fresh_html = f'<span style="color:#ff7a6a">● 数据不是今天的</span>'
+        stale_html = (f'<div class="stale">⚠ 今天是 <b>{today}</b>（{hm}，已收盘），但报告的最新数据是 '
+                      f'<b>{last_day}</b>，落后 <b>{gap_nat}</b> 天。<br>'
+                      f'说明这次补数据没成功（网络被卡、或接口限流）。'
+                      f'<b>不要用这份报告做决策</b>——关掉重开一次，窗口里会打印补数据的进度和失败原因。</div>')
+    else:
+        fresh_html = f'<span style="color:#e8b04b">● 最新 {last_day}（今日未收盘或休市）</span>'
+        stale_html = ""
 
     # 分项
     items = [
@@ -268,8 +376,24 @@ def build_html(sent, stats, out_path, trans=None):
 <header>
   <h1>A股情绪周期仪表盘<span>MARKET SENTIMENT CYCLE</span></h1>
   <div class="meta">数据截止 <b style="color:#c9d1d9">{last['date']}</b>　·　样本 {len(d)} 个交易日　·　股票池 {int(last['stock_n'])} 只<br>
-  口径：不复权价判板 · 分位数窗口 {config.PCT_WINDOW} 日 · 温度=六因子加权</div>
+  口径：不复权价判板 · 分位数窗口 {config.PCT_WINDOW} 日 · 温度=六因子加权　{fresh_html}</div>
 </header>
+
+{stale_html}
+
+<!-- ========== 跌停分级 ========== -->
+<section class="card">
+  <h2><span>跌停家数分级 · 买入唯一的刻度</span>
+    <span style="margin-left:auto;font-size:12px;color:#6e7681;font-weight:400;letter-spacing:0">
+      今日跌停 <b style="color:#2ea88a">{dt_n}</b> 家　大面 <b style="color:#2ea88a">{bl_n}</b> 家　·　{gap_txt}</span></h2>
+  <div class="tier">{tier_html}</div>
+  <div class="tip" style="margin-top:14px">{verdict}</div>
+  <div class="tip" style="margin-top:8px;border-left-color:#2a3b52">
+    <b>为什么用跌停家数，不用「温度低」</b>：温度是近 {config.PCT_WINDOW} 日的<b>相对冷热</b>，
+    阴跌三个月的市场温度可以不低，横盘反而容易掉到低位，所以「温度低」挑出来的是没人恐慌的日子。
+    跌停家数是<b>绝对恐慌</b>——1150 家跌停就是 1150 家，和过去一年什么行情无关。
+    历史统计按<b>独立事件</b>算（同一次崩盘的连续几天只计一次），否则一次暴跌能刷出 5 个「成功案例」。</div>
+</section>
 
 <!-- ========== 当前状态 ========== -->
 <section class="hero">

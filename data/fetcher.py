@@ -147,31 +147,60 @@ def _guess_trade_day(end):
     return d.strftime("%Y-%m-%d")
 
 
+_PROBE = {"day": None, "ts": 0.0}
+
+
+def _probe_last_trade_day():
+    """
+    问接口「最近一个已收盘交易日是哪天」：取一只票最近几根 K 线，最后一根的日期就是答案。
+
+    为什么需要它：指数日线缓存会滞后（收盘后还没刷新），如果拿它判断「今天是不是交易日」，
+    就会得出「今天不是」的结论，然后认定股票库已最新——数据永远停在昨天。
+    这是「打开还是旧日期」的最后一道自锁。1 次请求、约 0.3 秒，比猜日历可靠得多。
+    """
+    if _PROBE["day"] and time.time() - _PROBE["ts"] < 300:
+        return _PROBE["day"]
+    try:
+        from data import sina_kline
+        d, _ = sina_kline.fetch_recent(["sh600000"], datalen=3, quiet=True)
+        if len(d):
+            day = str(d["date"].max())
+            _PROBE.update(day=day, ts=time.time())
+            return day
+    except Exception:
+        pass
+    return None
+
+
 def align_trade_day(end):
     """
     把 end 对齐到最近一个已收盘的交易日。
 
-    指数日历能识别法定节假日，优先用它；但指数缓存本身可能因为网络问题刷不动，
-    这时如果照它算，就会得出「今天不是交易日」的错误结论，进而永远认为股票库已最新
-    ——曾经就是这个自锁把数据卡死在旧日期。所以指数明显落后时退回自然日推算。
+    三级判断：指数日历（能识别长假）→ 接口探测（最实时）→ 自然日推算（兜底）。
+    指数日历一旦滞后，绝不能把它当唯一依据，否则会自锁在旧日期上。
     """
-    guess = _guess_trade_day(end)
+    guard = _guess_trade_day(end)
     try:
         from data import index_data
         idx = index_data.load_index("sh000001")
         days = sorted([d for d in idx["date"].tolist() if d <= end])
-        if not days:
-            return guess
-        last = days[-1]
-        # 指数日历不旧于推算值 → 可信（它能识别节假日，比推算准）
-        if last >= guess:
+        last = days[-1] if days else None
+        if last and last >= guard:
             return last
-        # 略有落后（<=3 天）可能是长假，仍信指数；落后太多说明指数没刷新
-        if (pd.Timestamp(guess) - pd.Timestamp(last)).days <= 3:
+        # 日历落后于推算值：可能是没刷新，也可能是休市。直接问接口。
+        probe = _probe_last_trade_day()
+        if probe:
+            cand = min(probe, guard)
+            if last is None or cand >= last:
+                return cand
+        if last:
             return last
-        return guess
+        return guard
     except Exception:
-        return guess
+        probe = _probe_last_trade_day()
+        if probe:
+            return min(probe, guard)
+        return guard
 
 
 def _day_cov(df, day):

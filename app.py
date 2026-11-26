@@ -198,7 +198,7 @@ def main():
     ap.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     ap.add_argument("--selftest", action="store_true", help="只做启动自检，不联网不出报告")
     ap.add_argument("--update-only", action="store_true", help="只把数据补到最新，不出报告")
-    ap.add_argument("--version", action="version", version="情绪周期系统 1.2")
+    ap.add_argument("--version", action="version", version="情绪周期系统 1.3")
     args = ap.parse_args()
 
     if args.selftest:
