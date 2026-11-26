@@ -64,6 +64,27 @@ def _append_today(df, symbol):
     bar = _today_bar(symbol)
     if not bar or not len(df) or bar["date"] <= df["date"].max():
         return df
+    # 直接追加会在日历上留洞（例如 11-24 → 11-26，中间 11-25 不见），
+    # 而补数据要靠日历枚举交易日，洞会让它漏掉 11-25。所以先试着重抓整段日线。
+    last = pd.Timestamp(df["date"].max())
+    gap_days = [d for d in pd.bdate_range(last + pd.Timedelta(days=1), pd.Timestamp(bar["date"]))
+                if d.weekday() < 5]
+    if len(gap_days) > 1:
+        try:
+            fresh = fetch_index(symbol)
+            if pd.Timestamp(fresh["date"].max()) >= pd.Timestamp(bar["date"]):
+                return fresh
+            df = fresh          # 日线补不全时，至少把已有的部分写上
+            last = pd.Timestamp(df["date"].max())
+            if last >= pd.Timestamp(bar["date"]):
+                return df
+            gap_days = [d for d in pd.bdate_range(last + pd.Timedelta(days=1), pd.Timestamp(bar["date"]))
+                        if d.weekday() < 5]
+            if len(gap_days) > 1:
+                return df       # 还差着好几天，不动它，让补数据退回工作日枚举
+        except Exception:
+            return df           # 抓不到完整日线就宁可不动
+
     # 成交量单位在不同指数上不一致（手 / 股），按量级自动对齐，避免 100 倍误差
     lastv = float(df["volume"].iloc[-1]) if "volume" in df else 0
     if lastv > 0 and bar["volume"] > 0 and lastv / bar["volume"] > 20:

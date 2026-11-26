@@ -221,16 +221,27 @@ def _incomplete_days(df, end, full_n, ratio=0.85, lookback=6):
 
 
 def _trading_days_between(start, end):
-    """借指数日历枚举 [start, end] 之间的交易日；取不到日历就退回自然日估算。"""
+    """
+    枚举 [start, end] 之间的交易日。
+
+    不能只信指数日历：日历本身可能缺日（当天指数还没更新、靠实时接口补了一根，
+    中间就出现空洞），照它枚举会漏掉真实交易日，补数据就只补最后一天，
+    前一天的缺口永久留下——涨停/跌停全部算错。所以以工作日为基准，
+    只有当日历确实覆盖整段区间时才用它剔掉法定节假日。
+    """
+    days = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start, end)]
     try:
         from data import index_data
         idx = index_data.load_index("sh000001")
-        days = [d for d in idx["date"].tolist() if start <= d <= end]
-        if days:
-            return sorted(days)
+        have = set(idx["date"].tolist())
+        if have and min(have) <= start and max(have) >= end:
+            picked = [d for d in days if d in have]
+            # 剔掉的比例过高说明日历本身有洞（不是节假日），此时宁可用工作日
+            if len(picked) >= len(days) * 0.8:
+                return picked
     except Exception:
         pass
-    return [start]
+    return days
 
 
 def _fmt_sec(sec):
@@ -461,16 +472,23 @@ def update(start=None, end=None, workers=None, full=False, budget=None):
         _log("无新增数据（网络异常或非交易日），沿用现有缓存", logf)
         return old
 
-    # 覆盖率校验：整日没写全就不写，宁缺毋滥，否则会污染后续所有统计
+    # 覆盖率校验：整日没写全就不写，宁缺毋滥，否则会污染后续所有统计。
+    # 关键：一旦某天不达标，它之后的日期也一律不写——留下一个空洞，
+    # 涨跌幅就会拿「前一个已有日期」当基准，涨停/跌停会成片误判（曾把 67 家涨停算成 14 家）。
     merged = pd.concat([old, new], ignore_index=True).drop_duplicates(["code", "date"], keep="last")
-    ok_days, bad_days = [], []
+    ok_days, bad_days, cut = [], [], None
     for d in need:
         cov = _day_cov(merged, d)
-        (ok_days if cov >= full_n * 0.85 else bad_days).append((d, cov))
+        if cov >= full_n * 0.85:
+            ok_days.append((d, cov))
+        else:
+            bad_days.append((d, cov))
+            cut = d
+            break
 
-    if bad_days:
-        bad_list = [d for d, _ in bad_days]
-        new = new[~new["date"].isin(bad_list)]
+    if cut:
+        # 缺口之后的日期不写，保证写进去的是一段连续数据
+        new = new[new["date"] < cut]
         merged = pd.concat([old, new], ignore_index=True).drop_duplicates(["code", "date"], keep="last")
 
     for d, cov in ok_days:
@@ -478,8 +496,9 @@ def update(start=None, end=None, workers=None, full=False, budget=None):
     if bad_days:
         msg = "、".join(f"{d}({c}只)" for d, c in bad_days)
         print(f"  ⚠ 数据不全未写入：{msg}")
-        print("    下次启动会自动重试该日期，不影响已完整的交易日。")
-        _log(f"未达标未写入：{msg}", logf)
+        print(f"    {cut} 及之后的交易日全部暂缓写入，避免出现缺口——缺口会让涨跌幅算错。")
+        print("    下次启动会自动重试，网络好一点就能补上。")
+        _log(f"未达标未写入：{msg}（其后日期一并暂缓）", logf)
 
     if not len(new):
         _log("本次没有可写入的完整交易日", logf)
