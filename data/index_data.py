@@ -37,12 +37,14 @@ def load_index(symbol="sh000001", refresh=True):
             return df
         today = time.strftime("%Y-%m-%d")
         stale = df["date"].max() < today
-        # 1 小时节流，避免短时间内反复请求
-        if stale and (time.time() - os.path.getmtime(p)) > 3600:
-            try:
-                return fetch_index(symbol)
-            except Exception:
-                return df
+        # 10 分钟节流，避免短时间内反复请求；失败重试两次再放弃
+        if stale and (time.time() - os.path.getmtime(p)) > 600:
+            for _ in range(2):
+                try:
+                    return fetch_index(symbol)
+                except Exception:
+                    time.sleep(1)
+            return df
         return df
     return fetch_index(symbol)
 

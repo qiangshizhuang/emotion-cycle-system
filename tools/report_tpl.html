@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>情绪周期系统 · 历史准确性验证报告</title>
+<style>
+:root{
+  --bg:#0b0e13; --card:#131820; --card2:#171d27; --line:#232b38;
+  --tx:#dbe2ec; --tx2:#8e9aab; --tx3:#5f6b7c;
+  --up:#f2564a; --dn:#16b364;
+  --fz:#3b6ea5; --rp:#2e9db3; --fm:#e8a33d; --cx:#e04b3a; --dv:#a06cd5; --eb:#6b7c8f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+header{padding:56px 0 28px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#101724 0%,var(--bg) 100%)}
+h1{font-size:30px;font-weight:700;letter-spacing:-.3px}
+.sub{color:var(--tx2);margin-top:10px;font-size:14px}
+.tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;background:#1c2534;color:#9fb0c6;border:1px solid #2b3646;margin-right:8px}
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+h2{font-size:21px;font-weight:650;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+h2 .idx{font-size:12px;color:#6f7d90;font-weight:500;border:1px solid #2b3646;border-radius:4px;padding:1px 6px}
+.lead{color:var(--tx2);font-size:14px;margin-bottom:22px;max-width:860px}
+h3{font-size:16px;font-weight:600;margin:26px 0 12px;color:#c8d3e2}
+
+.kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
+.kpi .c{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.kpi .k{font-size:12px;color:var(--tx2);letter-spacing:.3px}
+.kpi .v{font-size:26px;font-weight:700;margin-top:6px;letter-spacing:-.5px}
+.kpi .n{font-size:12px;color:var(--tx3);margin-top:4px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+
+.chartbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 8px 6px;position:relative}
+canvas{display:block;width:100%;height:500px;cursor:crosshair}
+.tip{position:absolute;pointer-events:none;background:#0a0e14f2;border:1px solid #2c3849;border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.65;white-space:nowrap;box-shadow:0 8px 24px #0008;display:none;z-index:9;color:#cfd8e5}
+.tip b{color:#fff}
+.tip .ph{font-weight:600;margin-left:4px}
+.bar{display:flex;gap:6px;align-items:center;padding:0 12px 10px;flex-wrap:wrap}
+.btn{background:#1a2130;border:1px solid #2a3444;color:#9fb0c6;font-size:12.5px;padding:5px 12px;border-radius:6px;cursor:pointer}
+.btn:hover{border-color:#3c4a5e;color:#d5e0ee}
+.btn.on{background:#243044;border-color:#3f5madeup;color:#fff;border-color:#4a5d78}
+.chk{margin-left:auto;color:var(--tx2);font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+#tDaily{font-size:12.5px}
+#tDaily th,#tDaily td{padding:7px 8px}
+th{text-align:right;padding:9px 10px;color:var(--tx2);font-weight:500;font-size:12.5px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{text-align:right;padding:9px 10px;border-bottom:1px solid #1a212c;white-space:nowrap}
+tbody tr:hover{background:#18202c}
+.num{font-variant-numeric:tabular-nums}
+.pos{color:var(--up)}
+.neg{color:var(--dn)}
+.nv{color:var(--tx3)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:7px;vertical-align:middle}
+
+.defect td{white-space:normal;line-height:1.62;vertical-align:top}
+.defect th{white-space:nowrap}
+.note{border-left:3px solid #2f4055;background:#101722;padding:14px 18px;border-radius:0 8px 8px 0;color:#a9b6c8;font-size:13.8px;margin:18px 0}
+.note b{color:#e2ebf6}
+.warn{border-left-color:#7a5320;background:#1a1610}
+.ok{border-left-color:#1c5c42;background:#0d1a15}
+
+.verdict{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600}
+.v-pass{background:#0e2a1f;color:#3ddc97;border:1px solid #1d4a36}
+.v-half{background:#2a2210;color:#e8b04b;border:1px solid #4a3b1a}
+.v-fail{background:#2a1414;color:#f0776c;border:1px solid #4a2020}
+
+.play{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0;margin-bottom:16px;overflow:hidden}
+.play .h{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid var(--line)}
+.play .h .nm{font-size:17px;font-weight:700}
+.play .h .pos-pill{font-size:12.5px;padding:3px 11px;border-radius:20px;background:#1d2635;color:#b9c7da;border:1px solid #2b3646}
+.play .body{padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.play .blk .t{font-size:12px;color:var(--tx3);letter-spacing:.5px;margin-bottom:6px}
+.play .blk ul{list-style:none;font-size:13.8px;color:#c2cddc}
+.play .blk li{padding-left:14px;position:relative;margin-bottom:4px}
+.play .blk li:before{content:"";position:absolute;left:0;top:9px;width:4px;height:4px;border-radius:50%;background:#4f6480}
+.play .stat{padding:12px 20px;border-top:1px solid var(--line);font-size:13px;color:#93a1b4;background:#101620;display:flex;gap:22px;flex-wrap:wrap}
+.play .stat span b{color:#dbe5f2}
+.play .stat .p{color:var(--tx3)}
+
+footer{padding:36px 0 64px;color:var(--tx3);font-size:12.5px}
+.filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+input[type=text]{background:#141b26;border:1px solid #2a3444;color:#d5e0ee;padding:6px 12px;border-radius:6px;font-size:13px;width:150px;outline:none}
+input[type=text]:focus{border-color:#3f5f8a}
+.scroll{max-height:640px;overflow:auto;overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.scroll thead th{position:sticky;top:0;background:#161d29;z-index:2}
+code{background:#1a212c;padding:1px 6px;border-radius:4px;font-size:12.5px;color:#9fc4e8}
+@media(max-width:900px){.kpi,.grid2,.grid3{grid-template-columns:1fr 1fr}.play .body{grid-template-columns:1fr}h1{font-size:23px}}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <div class="tag">历史回测</div><div class="tag">2023-01-04 → 2026-11-24</div><div class="tag">880 个有效交易日</div>
+  <h1 style="margin-top:16px">情绪周期系统 · 历史准确性验证</h1>
+  <p class="sub">用 5,223 只股票、474 万行日线，把过去 880 个交易日每天的情绪温度与阶段全部算出来。<br>
+  这份报告的立场是：<b style="color:#dbe2ec">先证明它哪里准、哪里不准，再谈怎么用。</b></p>
+</div>
+</header>
+
+<main class="wrap">
+
+<!-- ============ 结论 ============ -->
+<section>
+  <h2><span class="idx">00</span>四句话结论</h2>
+  <p class="lead">不吹「能预测涨跌」，只报可以直接核对的数字。四条里有一条是失败的，也照实写。</p>
+
+  <div class="kpi">
+    <div class="c"><div class="k">极值日捕捉</div><div class="v" style="color:var(--up)">8 / 8</div><div class="n">近三年最大 8 次暴跌，全部落在冰点或退潮</div></div>
+    <div class="c"><div class="k">温度单调性</div><div class="v" style="color:#3ddc97">通过</div><div class="n">温度 80-100 的未来 5 日 +1.56%，20-40 为 −0.33%</div></div>
+    <div class="c"><div class="k">次日方向命中率</div><div class="v" style="color:#e8b04b">50.6%</div><div class="n">≈ 抛硬币。它不预测明天，别这么用</div></div>
+    <div class="c"><div class="k">最大回撤 · 信号 vs 满仓</div><div class="v" style="color:#3ddc97">−16<span style="font-size:16px;color:#5f6b7c"> / </span>−34.9%</div><div class="n">年化 8.1% vs 3.7%，夏普 0.59 vs 0.27</div></div>
+  </div>
+
+  <div class="note"><b>一句话：</b>它是一个<b>温度计</b>，不是一个<b>水晶球</b>。<br>
+  温度计的价值在于告诉你「现在是 38 度还是 40 度、该穿几件衣服」，而不是「明天会不会下雨」。<br>
+  把它当择时神器用，命中率 50.6%；把它当仓位调节器用，回撤砍掉一半。</div>
+</section>
+
+<!-- ============ 图 ============ -->
+<section>
+  <h2><span class="idx">01</span>880 个交易日全图 · 每一格都是可核对的一天</h2>
+  <p class="lead">上线为全市场等权指数（5223 只股票等权，比上证更贴近题材股真实体感），中线为情绪温度，下沿色带为阶段。
+  鼠标移到任意一天，下方会显示当天全部原始指标。</p>
+
+  <div class="chartbox">
+    <div class="bar">
+      <button class="btn on" data-range="all">全部</button>
+      <button class="btn" data-range="250">近 250 日</button>
+      <button class="btn" data-range="2023">2023</button>
+      <button class="btn" data-range="2024">2024</button>
+      <button class="btn" data-range="2025">2025</button>
+      <button class="btn" data-range="2026">2026</button>
+      <label class="chk"><input type="checkbox" id="mark" checked> 标注关键日</label>
+    </div>
+    <canvas id="cv"></canvas>
+    <div class="tip" id="tip"></div>
+  </div>
+
+  <div class="note"><b>怎么自己验证：</b>打开通达信 / 同花顺，跳到色带上的任意一天，用「涨停家数」排序核对黄色数字（本系统剔除 ST、次新、停牌、低于 1 元）。
+  口径差异通常来自 ST 与北交所是否计入，本系统<b>剔除 ST</b>，所以数字会比行情软件少 5~15 家。</div>
+</section>
+
+<!-- ============ 验证一：极值日 ============ -->
+<section>
+  <h2><span class="idx">02</span>验证一 · 历史大顶大底，它到底认不认得 <span class="verdict v-pass">通过 8/8</span></h2>
+  <p class="lead">把所有交易日的<b>当日等权涨跌幅</b>排序，取最极端的各 8 天。这是最难作弊的检验——这些日子不用挑，是市场自己选的。右侧两列是「事后」才知道的结果，用来判断当时的标签对不对。</p>
+
+  <h3>近三年跌幅最大的 8 天</h3>
+  <div class="card" style="padding:6px 12px"><table id="tDrop"></table></div>
+
+  <h3 style="margin-top:26px">近三年涨幅最大的 8 天</h3>
+  <div class="card" style="padding:6px 12px"><table id="tRise"></table></div>
+
+  <div class="note ok"><b>读出来的东西：</b><br>
+  · 8 次暴跌，<b>8 次</b>当天就落在「冰点」或「退潮」——没有一次落到「发酵」或「高潮」里，这是最难蒙对的部分。<br>
+  · 最大两次暴跌（2025-04-07 关税、2024-02-05 微盘流动性危机）当天就是冰点，之后 5 日分别 +8.7%、+13.5%，10 日 +9.6%、+26.1%。<br>
+  · 反过来，最大两次暴涨（2024-09-30、2024-10-08）都被标「高潮」；2024-10-08 那天天量 724 家涨停，之后 5 日 <b>−11.2%</b>。顶点认出来了。<br>
+  · 涨幅榜里 2024-04-17（+5.98%、225 家涨停）现在标「修复」。<b>它原本被误标成冰点</b>，是这次验证发现并修掉的（详见第 12 节）。</div>
+</section>
+
+<!-- ============ 验证二：温度单调性 ============ -->
+<section>
+  <h2><span class="idx">03</span>验证二 · 温度分越高，后面真的越好吗 <span class="verdict v-pass">通过</span></h2>
+  <p class="lead">把每天的温度切成 5 档，看每一档之后 5 日、10 日的等权指数收益。如果系统有效，档位之间应该有梯度，而不是一团乱。</p>
+
+  <div class="grid2">
+    <div class="card" style="padding:6px 12px"><table id="tBin"></table></div>
+    <div class="card">
+      <div style="font-size:12.5px;color:#8e9aab;margin-bottom:10px">未来 5 日平均收益（等权指数）</div>
+      <canvas id="cvBar" style="height:230px;cursor:default"></canvas>
+      <div style="font-size:12.5px;color:#5f6b7c;margin-top:8px">注意形状：两头高、中间 20-40 档最低。这是 A 股的反转 + 动量双重效应，不是线性关系。</div>
+    </div>
+  </div>
+
+  <div class="note"><b>关键：</b>温度 <b>80-100 档</b>未来 5 日 +1.56%、胜率 61%，是全场最好的一档——<b>「过热」在短线维度是继续涨，不是马上跌</b>。
+  但温度 <b>20-40 档</b>（场最冷的时候）只有 −0.33%、胜率 49%，是最差的一档。这条数据推翻了一句常见的鸡汤：<b>「越冷越要买」是错的</b>，冷的时候还会更冷。</div>
+</section>
+
+<!-- ============ 验证三：命中率 ============ -->
+<section>
+  <h2><span class="idx">04</span>验证三 · 能不能预测明天涨跌 <span class="verdict v-fail">不通过 50.6%</span></h2>
+  <p class="lead">这是最常被误用的地方，所以单独拿出来说清楚。规则：把冰点/修复/发酵算「看多」，高潮/退潮算「看空」，分歧算中性不入场，看次日等权指数方向对不对。</p>
+
+  <div class="grid3">
+    <div class="card"><div style="font-size:12px;color:#8e9aab">次日方向命中率</div><div style="font-size:30px;font-weight:700;color:#f0776c;margin:6px 0">50.6%</div><div style="font-size:12.5px;color:#5f6b7c">737 个有立场交易日，命中 373 天</div></div>
+    <div class="card"><div style="font-size:12px;color:#8e9aab">看多组次日均收益</div><div style="font-size:30px;font-weight:700;margin:6px 0">+0.01%</div><div style="font-size:12.5px;color:#5f6b7c">559 天，上涨概率 53.1%</div></div>
+    <div class="card"><div style="font-size:12px;color:#8e9aab">看空组次日均收益</div><div style="font-size:30px;font-weight:700;color:var(--up);margin:6px 0">+0.11%</div><div style="font-size:12.5px;color:#5f6b7c">178 天，下跌概率仅 42.7%</div></div>
+  </div>
+
+  <div class="note warn"><b>必须承认：</b>「看空组」次日平均还涨 0.11%，下跌概率不到 43%。也就是说，<b>系统喊「退潮」的时候，第二天下跌的概率还不到一半</b>。
+  任何声称「知道明天涨跌」的说法，在这份数据面前都站不住。<br><br>
+  但这也解释得通：A 股日线级别本就近似随机游走（基准上涨概率 53.7%），任何日频信号都很难显著超越它。<b>周期的尺度是「几天到几周」，不是「一天」。</b>所以下面才是它真正的用法。</div>
+</section>
+
+<!-- ============ 验证四：仓位 ============ -->
+<section>
+  <h2><span class="idx">05</span>验证四 · 用它管仓位，有用吗 <span class="verdict v-pass">通过</span></h2>
+  <p class="lead">规则严格无未来函数：<b>用前一天收盘算出的温度，决定今天的仓位</b>，收盘执行，不做任何择时微调。标的为全市场等权指数（等于买下全部 5223 只股票）。</p>
+
+  <div class="card" style="padding:6px 12px"><table id="tBt"></table></div>
+
+  <h3>分年度：什么时候赢，什么时候输</h3>
+  <div class="card" style="padding:6px 12px"><table id="tYear"></table></div>
+
+  <div class="note"><b>赢在哪：</b>三年半下来年化 8.1% 对 3.7%，最大回撤 −16.0% 对 −34.9%，夏普 0.59 对 0.27。收益翻倍、回撤腰斩。<br>
+  <b>输在哪：</b>2025 年满仓基准 +36.6%，信号版只有 +13.0%——因为那年大部分时间温度在 40-60 之间，策略只给半仓，牛市里必然跑输。<br>
+  <b>所以它是防守型工具：</b>赚的是「少亏」的钱，不是「多赚」的钱。想抓牛市主升，得靠自己选股，它只负责不让你在崩盘里满仓。</div>
+</section>
+
+<!-- ============ 阶段收益 + 转移 ============ -->
+<section>
+  <h2><span class="idx">06</span>六个阶段的真实赔率表</h2>
+  <p class="lead">这张表是整套系统的核心。每个阶段历史上出现过多少次、之后 1/5/10 日的平均收益与胜率、以及最差情况能亏多少。</p>
+
+  <div class="card" style="padding:6px 12px"><table id="tPhase"></table></div>
+
+  <div class="note"><b>三个反直觉的发现：</b><br>
+  1. <b>「高潮」之后 5 日平均还有 +1.19%、胜率 70%</b>，是六个阶段最高的。因为它标的是情绪爆发的<b>起点那几天</b>（如 2024-09-26 标高潮后 5 日 +15%），不是终点。真正危险的是<b>高潮转向分歧那几天</b>。<br>
+  2. <b>「冰点」之后 5 日平均 −0.34%、胜率 55%</b>，并不赚钱。冰点只代表「极冷」，冷可以更冷（2024-01-22 标冰点后 10 日 −18.4%）。<b>但这个结论只对「按温度定义的冰点」成立——第 09 节换成跌停家数重算，结论完全相反，务必连着看。</b><br>
+  3. <b>「修复」占了 33% 的时间</b>，但 5 日收益只有 +0.01%，胜率 50.9%——大部分时间市场就在这个「不上不下」的状态里磨人。</div>
+
+  <h3>阶段转移概率：现在这个阶段，明天大概率去哪（%）</h3>
+  <div class="card" style="padding:6px 12px"><table id="tTr"></table></div>
+  <div class="note"><b>看对角线：</b>冰点次日照旧冰点的概率 65.5%、修复 85.2%、发酵 82.0%、高潮 70.2%、分歧 85.2%、退潮 71.0%。<b>阶段是「粘」的，一天就反转的情况很少</b>——这就是为什么它能用来管仓位：它不会今天让你满仓、明天让你空仓。<br>
+  另外注意：<b>冰点从不直接跳高潮（0%）</b>，高潮也从不直接回发酵（0%）。这个循环顺序是市场结构决定的，不是代码硬写的。</div>
+</section>
+
+<!-- ============ 打板收益 ============ -->
+<section>
+  <h2><span class="idx">07</span>做题材/打板的人该看哪一列</h2>
+  <p class="lead">上面用的都是「全市场等权」，但做短线的人买的是涨停板。换个标尺：<b>今天买入昨天涨停的所有股票，明天卖出</b>的平均收益（即「昨涨停溢价」）。</p>
+
+  <div class="card" style="padding:6px 12px"><table id="tPb"></table></div>
+
+  <div class="note warn"><b>这个数字要打折看：</b>全样本次日打板 +1.86%、胜率 83%，看着像印钞机，<b>实际上大部分赚不到</b>——一字板买不进、涨停板排队成交不了、次日高开你未必卖得掉。
+  它只能说明<b>相对强弱</b>：温度 80-100 档（+2.50%、胜率 89%）明显好于 20-40 档（+1.67%、胜率 80%）。<b>差别在 0.8 个百分点，不在「能不能赚」。</b><br><br>
+  结论：情绪周期对打板的指导力，主要体现在<b>温度高的时候打板更安全</b>，而不是「冰点打板能暴富」。</div>
+</section>
+
+<!-- ============ 逐日明细 ============ -->
+<section>
+  <h2><span class="idx">08</span>逐日明细 · 880 天全在这，一天一天核</h2>
+  <p class="lead">每行的「后 5 日 / 后 10 日」是事后收益，仅供验证，不可用来交易。温度单位 0-100，其余为当日原始家数与比例。</p>
+
+  <div class="filters">
+    <input type="text" id="q" placeholder="搜索日期 如 2024-10">
+    <button class="btn on" data-ph="all">全部</button>
+    <button class="btn" data-ph="FREEZE">冰点</button>
+    <button class="btn" data-ph="REPAIR">修复</button>
+    <button class="btn" data-ph="FERMENT">发酵</button>
+    <button class="btn" data-ph="CLIMAX">高潮</button>
+    <button class="btn" data-ph="DIVERGE">分歧</button>
+    <button class="btn" data-ph="EBB">退潮</button>
+    <span id="cnt" style="color:#5f6b7c;font-size:12.5px;margin-left:6px"></span>
+    <button class="btn" id="csv" style="margin-left:auto">导出 CSV</button>
+  </div>
+  <div class="scroll"><table id="tDaily"><thead><tr>
+    <th>日期</th><th>阶段</th><th>温度</th><th>涨停</th><th>跌停</th><th>封板率</th><th>最高板</th>
+    <th>涨停溢价</th><th>大面</th><th>等权涨幅</th><th>等权指数</th><th>上证</th><th>后5日</th><th>后10日</th>
+  </tr></thead><tbody></tbody></table></div>
+</section>
+
+<!-- ============ 冰点怎么买 ============ -->
+<section>
+  <h2><span class="idx">09</span>核心修正：冰点到底能不能买</h2>
+  <p class="lead">前面第 06 节写着「冰点后 5 日 −0.34%，冰点当天抄底是错的」。这个结论用的是<b>系统自己的「冰点」标签</b>——
+  而那个标签是按温度分位算的。<b>温度是「相对冷热」，不是「绝对恐慌」</b>，这是定义错了，不是「冰点不能买」。</p>
+
+  <div class="note warn"><b>你的质疑是对的。</b>把同样这些「冷」的时刻，换成按<b>跌停家数</b>（绝对恐慌度）重新分组，结论完全反过来。
+  下面所有数字都按<b>独立事件</b>统计——同一次崩盘的连续几天只算一次，否则一次暴跌能刷出 5 个「成功案例」，
+  胜率会假得离谱。</div>
+
+  <h3>表 A｜按当日跌停家数分组（这才是冰点的正确刻度）</h3>
+  <div class="card" style="padding:6px 12px"><table id="tDt"></table></div>
+  <div class="note ok"><b>看到什么：</b>跌停家数越多，后面涨得越猛，而且<b>最差情况越好</b>。<br>
+  跌停 ≥150 家时买入（8 次独立事件），后 20 日平均 <b>+13.32%</b>，<b>8 次全赚</b>，最差的一次也有 <b>+3.5%</b>。<br>
+  这就是「买在冰点」的真实含义——不是温度低到多少，而是<b>跌停板铺满屏幕的那一天</b>。</div>
+
+  <h3>表 B｜同一批时刻，三种定义的天壤之别</h3>
+  <div class="card" style="padding:6px 12px"><table id="tDef"></table></div>
+  <div class="note"><b>为什么会差这么多：</b>「冰点标签」要求温度分位极低，而温度是 250 日窗口的相对值——
+  跌了三个月的市场，温度可能一直「不低」，反而是横盘时温度更容易掉到低位。所以标签会挑出一堆<b>没人恐慌的阴跌日</b>。<br>
+  跌停家数不会骗人：1150 家跌停就是 1150 家跌停，不管前 250 天发生了什么。</div>
+
+  <h3>表 C｜那「卖在高潮」对不对</h3>
+  <div class="card" style="padding:6px 12px"><table id="tSell"></table></div>
+  <div class="note warn"><b>卖出后市场还在涨，说明你卖早了（正数＝卖错）。</b><br>
+  高潮当天清仓，之后 5 日还能再涨 +0.98%、20 日 +1.81%——<b>高潮不是顶，是顶前最猛的一段</b>。<br>
+  真正的卖点是<b>高潮转分歧那天</b>：卖完之后 20 日是 <b>−2.13%</b>，这是三行里唯一为负的。<br>
+  所以口诀应该改成：<b>买在跌停潮，卖在转分歧</b>。</div>
+
+  <h3>三级建仓法（可直接执行）</h3>
+  <div class="card">
+    <table style="font-size:13.5px" class="defect">
+      <thead><tr><th style="width:150px">触发（当日收盘可见）</th><th style="width:96px">加到几成</th><th>为什么是这个数</th></tr></thead>
+      <tbody>
+        <tr><td style="text-align:left"><b>一级</b>　跌停 ≥60 家</td><td style="text-align:center;color:#3ddc97;font-weight:700">2~3 成</td>
+          <td style="text-align:left;color:#a9b6c8">20 次独立事件，后 20 日 +6.86%、胜率 75%。这是「恐慌开始」，先建底仓，不要急。</td></tr>
+        <tr><td style="text-align:left"><b>二级</b>　跌停 ≥150 家</td><td style="text-align:center;color:#3ddc97;font-weight:700">5~6 成</td>
+          <td style="text-align:left;color:#a9b6c8">8 次，后 20 日 +13.32%、<b>8 次全赚</b>、最差 +3.5%。这是全套系统里赔率最好的位置。</td></tr>
+        <tr><td style="text-align:left"><b>三级</b>　跌停 ≥400 家</td><td style="text-align:center;color:#3ddc97;font-weight:700">8 成</td>
+          <td style="text-align:left;color:#a9b6c8">4 次，后 20 日 +15.04%、最差 +8.1%。千股跌停是礼物，但一年只有一两次。</td></tr>
+        <tr><td style="text-align:left">辅助：大面 ≥400 家</td><td style="text-align:center;color:#e8b04b;font-weight:700">+1~2 成</td>
+          <td style="text-align:left;color:#a9b6c8">24 次（样本最多、最稳），后 20 日 +6.43%、胜率 67%。跌停不够多但大面够多时，用它补位。</td></tr>
+        <tr><td style="text-align:left"><b>卖出</b>　转分歧 / 转退潮</td><td style="text-align:center;color:#f0776c;font-weight:700">清到 2 成</td>
+          <td style="text-align:left;color:#a9b6c8">高潮当天别急着清（后面还有 +1%）；等状态机从「高潮」跳到「分歧」再走，之后 20 日 −2.13%。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note"><b>三条纪律，比规则本身重要：</b><br>
+  1. <b>持有 20 个交易日，不要做 3 天短线。</b>跌停 ≥150 那组的 T+5 是 +3.89%，T+20 是 +13.32%——<b>时间越久越赚</b>，说明这是修复行情，不是反弹。<br>
+  2. <b>分批，不押注。</b>「跌停 150 家」之后可能还有「跌停 400 家」，2024-02 连跌三天才见底。一级建底仓、二级加主力、三级打满，这个顺序不能反。<br>
+  3. <b>三次都触发后仍要留 2 成现金。</b>8 次全赚是历史，不是保证；最差的一次也有 +3.5%，但那是因为样本里没有出现「跌停潮后继续阴跌 20 天」的情形。样本只有 8 次，不要当成定律。</div>
+</section>
+
+<!-- ============ 操作手册 ============ -->
+<section>
+  <h2><span class="idx">10</span>每个阶段该干什么</h2>
+  <p class="lead">下面每一条都对应上面表格里的数字。<b>仓位不是拍脑袋，是按该阶段的历史胜率与最差情况定的。</b></p>
+
+  <div id="playbook"></div>
+
+  <div class="note"><b>四句总口诀：</b><br>
+  <b>冰点在跌停潮里买，越恐慌越买</b>（跌停≥150 家买入，8 次后 20 日全赚、均值 +13.3%）<br>
+  <b>修复试仓，半仓等确认</b>（修复期 5 日 +0.01%，赔率好胜率平，只适合小仓试错）<br>
+  <b>发酵加满，龙头持有</b>（发酵 +0.22%、胜率 46.9%，主升段，靠少数大涨日赚钱）<br>
+  <b>高潮别急着清，转分歧再清</b>（高潮当天清仓后面还涨 +1%；转分歧后 20 日 −2.13%）</div>
+</section>
+
+<!-- ============ 现在 ============ -->
+<section>
+  <h2><span class="idx">11</span>顺便：今天在哪（2026-11-25 收盘）</h2>
+  <div class="grid3" style="margin-top:8px">
+    <div class="card"><div style="font-size:12px;color:#8e9aab">系统判定</div>
+      <div style="font-size:30px;font-weight:700;color:#2e9db3;margin:6px 0">修复 · 二次探底</div>
+      <div style="font-size:12.5px;color:#5f6b7c">11-20 冰点 → 11-23 反弹 → 11-25 再跌</div></div>
+    <div class="card"><div style="font-size:12px;color:#8e9aab">跌停 / 大面家数（真正的刻度）</div>
+      <div style="font-size:30px;font-weight:700;margin:6px 0">47 <span style="font-size:15px;color:#5f6b7c">跌停</span>　697 <span style="font-size:15px;color:#5f6b7c">大面</span></div>
+      <div style="font-size:12.5px;color:#5f6b7c">大面已达辅助门槛 400，跌停还没到一级 60</div></div>
+    <div class="card"><div style="font-size:12px;color:#8e9aab">当日市场</div>
+      <div style="font-size:30px;font-weight:700;color:#16b364;margin:6px 0">−3.70%</div>
+      <div style="font-size:12.5px;color:#5f6b7c">等权跌幅，只有 9.7% 的股票上涨</div></div>
+  </div>
+  <div class="note"><b>怎么读：</b>11-23 那根反弹没接住，11-25 又跌 3.70%，上涨家数只剩 9.7%、大面 697 家。温度从 54 掉回 25，但阶段标签因为「最小驻留」还挂在修复——<b>这正是标签滞后的地方，别只看标签</b>。<br>
+  按第 09 节的跌停分级：<b>跌停 47 家还没到一级（60），但大面 697 已过辅助线（400）</b>。历史上「大面 ≥400」共 24 次独立事件，后 20 日 +6.43%、胜率 67%。<br>
+  <b>对应动作：先上 2 成试仓</b>（买宽基或等权，不是买个股），把子弹留住：跌停家数到 60 加到 3 成、到 150 加到 5~6 成。若三天内跌停不回 60 家而是缩到 20 家以下、涨停回到 80 家，那就是反弹成立，按修复期做首板。</div>
+</section>
+
+<!-- ============ 缺陷 ============ -->
+<section>
+  <h2><span class="idx">12</span>它已知的毛病（本次验证发现并已修）</h2>
+
+  <div class="card">
+    <table style="font-size:13.5px" class="defect">
+      <thead><tr><th style="width:88px">问题</th><th style="width:170px">实例</th><th>原因与处理</th></tr></thead>
+      <tbody>
+        <tr><td style="text-align:left"><b style="color:#f0776c">已修复</b></td><td style="text-align:left">2024-04-17 报「冰点」</td><td style="text-align:left;color:#a9b6c8">当天 225 家涨停、溢价 +7.8%、指数 +5.98%，却显示冰点。原因是「阶段最小驻留 2 天」把刚反弹的第一天压回了前一天。已加规则：冰点/退潮中出现涨停 ≥100 家或溢价 ≥5% 时，立即放行切修复。</td></tr>
+        <tr><td style="text-align:left"><b style="color:#f0776c">已修复</b></td><td style="text-align:left">2025-04-08 报「冰点」</td><td style="text-align:left;color:#a9b6c8">同上（前一天 2695 家跌停，平滑值把分位拖住）。同一规则一起修掉。</td></tr>
+        <tr><td style="text-align:left"><b style="color:#e8b04b">固有</b></td><td style="text-align:left">冰点常「晚一天」</td><td style="text-align:left;color:#a9b6c8">温度用 EMA 平滑抗噪，代价是拐点滞后 1 天。这是换取「不天天跳变」的必要成本，不建议再改。</td></tr>
+        <tr><td style="text-align:left"><b style="color:#e8b04b">固有</b></td><td style="text-align:left">高潮可连挂 5~8 天</td><td style="text-align:left;color:#a9b6c8">2024-10-21 至 10-31 连续标高潮，实际是震荡上行。高潮是「区间」不是「一天」，所以操作上应减半而非清仓。</td></tr>
+        <tr><td style="text-align:left"><b style="color:#e8b04b">固有</b></td><td style="text-align:left">温度 56 却标「退潮」</td><td style="text-align:left;color:#a9b6c8">温度（连续）与阶段（离散）会短暂背离：<b>29 天 / 3.3%</b> 的交易日温度 &gt; 50 却仍显示退潮或冰点（如 2025-07-07 温度 56、2023-11-06 温度 83）。原因是阶段有粘性，要等动量确认才切。看盘时以<b>温度趋势</b>为准，阶段只是标签。</td></tr>
+        <tr><td style="text-align:left"><b style="color:#e8b04b">固有</b></td><td style="text-align:left">只看全市场，不看个股</td><td style="text-align:left;color:#a9b6c8">它回答「天气怎么样」，不回答「买哪只」。个股仍需自己看题材、龙头、量能。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+数据源：新浪财经日线（不复权价判涨跌停，前复权价算均线）· 样本 2023-01-04 ~ 2026-11-25 · 5,223 只 A 股 · 4,749,829 行<br>
+所有数字可由 reports/情绪周期_逐日明细_含前瞻收益.csv 复算 · 本报告不构成投资建议
+</footer>
+
+</main>
+
+<script>
+const SEQ = __SEQ__, T1 = __T1__, T2 = __T2__, DROP = __DROP__, RISE = __RISE__,
+      TR = __TR__, BT = __BT__, PB = __PB__, KPI = __KPI__,
+      TDT = __TDT__, TDEF = __TDEF__, TSELL = __TSELL__;
+const PC = {FREEZE:"#3b6ea5",REPAIR:"#2e9db3",FERMENT:"#e8a33d",CLIMAX:"#e04b3a",DIVERGE:"#a06cd5",EBB:"#6b7c8f"};
+
+/* ---------- 表格 ---------- */
+const f2 = x => (x===null||x===undefined) ? "—" : (x>0?"+":"") + x.toFixed(2);
+const cls = x => (x===null||x===undefined||x===0) ? "nv" : (x>0?"pos":"neg");
+function nfmt(x,d=2){return (x===null||x===undefined)?"—":(x>0?"+":"")+Number(x).toFixed(d);}
+
+/* 表1 阶段 */
+document.getElementById("tPhase").innerHTML =
+ "<thead><tr><th>阶段</th><th>天数</th><th>占比</th><th>均温</th><th>次日均</th><th>次日胜率</th><th>5日均</th><th>5日胜率</th><th>10日均</th><th>5日中位</th><th>5日最差</th><th>5日最好</th><th>5日均回撤</th></tr></thead><tbody>" +
+ T1.map(r=>`<tr>
+   <td><span class="dot" style="background:${r.color}"></span>${r.name}</td>
+   <td class="num">${r.n}</td><td class="num nv">${r.pct}%</td><td class="num nv">${r.temp}</td>
+   <td class="num ${cls(r.t1)}">${nfmt(r.t1)}%</td><td class="num nv">${r.w1}%</td>
+   <td class="num ${cls(r.t5)}"><b>${nfmt(r.t5)}%</b></td><td class="num nv">${r.w5}%</td>
+   <td class="num ${cls(r.t10)}">${nfmt(r.t10)}%</td>
+   <td class="num ${cls(r.m5)}">${nfmt(r.m5)}%</td>
+   <td class="num neg">${nfmt(r.lo5,1)}%</td><td class="num pos">+${r.hi5.toFixed(1)}%</td>
+   <td class="num neg">${nfmt(r.dd5)}%</td></tr>`).join("") + "</tbody>";
+
+/* 表2 温度分箱 */
+document.getElementById("tBin").innerHTML =
+ "<thead><tr><th>温度档</th><th>天数</th><th>5日均</th><th>5日胜率</th><th>10日均</th><th>5日均回撤</th></tr></thead><tbody>" +
+ T2.map(r=>`<tr><td>${r.b}</td><td class="num">${r.n}</td>
+   <td class="num ${cls(r.t5)}"><b>${nfmt(r.t5)}%</b></td><td class="num nv">${r.w5}%</td>
+   <td class="num ${cls(r.t10)}">${nfmt(r.t10)}%</td><td class="num neg">${nfmt(r.dd)}%</td></tr>`).join("") + "</tbody>";
+
+/* 表3 极值 */
+function evTable(el, arr){
+  el.innerHTML = "<thead><tr><th>日期</th><th>阶段</th><th>当日等权</th><th>涨停</th><th>跌停</th><th>大面</th><th>溢价</th><th>温度</th><th>后5日</th><th>后10日</th></tr></thead><tbody>" +
+  arr.map(r=>`<tr><td>${r.d}</td>
+    <td style="text-align:left"><span class="dot" style="background:${PC[r.p]||"#666"}"></span>${r.pn}</td>
+    <td class="num ${cls(r.r)}"><b>${nfmt(r.r)}%</b></td>
+    <td class="num ${r.z>100?'pos':''}">${r.z}</td>
+    <td class="num ${r.dt>100?'neg':''}">${r.dt}</td>
+    <td class="num">${r.bl}</td>
+    <td class="num ${cls(r.pm)}">${nfmt(r.pm,1)}%</td>
+    <td class="num nv">${r.s}</td>
+    <td class="num ${cls(r.f5)}">${nfmt(r.f5,1)}%</td>
+    <td class="num ${cls(r.f10)}">${nfmt(r.f10,1)}%</td></tr>`).join("") + "</tbody>";
+}
+evTable(document.getElementById("tDrop"), DROP);
+evTable(document.getElementById("tRise"), RISE);
+
+/* 表4 转移 */
+document.getElementById("tTr").innerHTML =
+ "<thead><tr><th>今天 ↓ / 明天 →</th>" + TR.map(r=>`<th>${r.name}</th>`).join("") + "</tr></thead><tbody>" +
+ TR.map(r=>`<tr><td><b>${r.name}</b></td>` + r.vals.map((x,i)=>{
+    const a = x>=50?0.85: x>=20?0.5: x>=8?0.28:0;
+    const bg = a? `background:rgba(224,75,58,${a});color:#fff;font-weight:${x>=20?600:400}` : "color:#4a5568";
+    return `<td class="num" style="${bg}">${x.toFixed(1)}</td>`;
+ }).join("") + "</tr>").join("") + "</tbody>";
+
+/* 表5 仓位 */
+document.getElementById("tBt").innerHTML =
+ "<thead><tr><th>策略</th><th>总收益</th><th>年化</th><th>最大回撤</th><th>夏普</th><th>日均仓位</th><th>盈利日占比</th></tr></thead><tbody>" +
+ BT.map(r=>`<tr><td style="text-align:left">${r["策略"]}</td>
+   <td class="num ${cls(Number(r["总收益%"]))}">${nfmt(Number(r["总收益%"]),1)}%</td>
+   <td class="num ${cls(Number(r["年化%"]))}"><b>${nfmt(Number(r["年化%"]),1)}%</b></td>
+   <td class="num neg">${Number(r["最大回撤%"]).toFixed(1)}%</td>
+   <td class="num nv">${Number(r["夏普"]).toFixed(2)}</td>
+   <td class="num nv">${Number(r["日均仓位%"]).toFixed(0)}%</td>
+   <td class="num nv">${Number(r["胜率%"]).toFixed(1)}%</td></tr>`).join("") + "</tbody>";
+
+/* 年度 */
+const YEAR = [["2023",2.6,-6.1,-5.6],["2024",1.6,27.3,25.7],["2025",36.6,13.0,13.0],["2026",-19.2,-0.1,-2.6]];
+document.getElementById("tYear").innerHTML =
+ "<thead><tr><th>年份</th><th>满仓基准</th><th>温度仓位</th><th>阶段仓位</th><th>结论</th></tr></thead><tbody>" +
+ YEAR.map(r=>`<tr><td>${r[0]}</td>
+   <td class="num ${cls(r[1])}">${nfmt(r[1],1)}%</td>
+   <td class="num ${cls(r[2])}">${nfmt(r[2],1)}%</td>
+   <td class="num ${cls(r[3])}">${nfmt(r[3],1)}%</td>
+   <td style="text-align:left;color:#8e9aab;font-size:12.5px">${r[2]>r[1]?"跑赢":"跑输"}</td></tr>`).join("") + "</tbody>";
+
+/* 表6 打板 */
+document.getElementById("tPb").innerHTML =
+ "<thead><tr><th>阶段</th><th>样本天数</th><th>次日打板平均</th><th>胜率</th><th>中位数</th><th>最差一天</th></tr></thead><tbody>" +
+ PB.map(r=>`<tr><td>${r.name}</td><td class="num">${r.n}</td>
+   <td class="num ${cls(r.mean)}"><b>${nfmt(r.mean)}%</b></td><td class="num nv">${r.win}%</td>
+   <td class="num ${cls(r.med)}">${nfmt(r.med)}%</td><td class="num neg">${r.lo.toFixed(1)}%</td></tr>`).join("") + "</tbody>";
+
+/* 表A 跌停分级 */
+document.getElementById("tDt").innerHTML =
+ "<thead><tr><th>当日跌停家数</th><th>独立事件</th><th>后5日</th><th>后5胜率</th><th>后20日</th><th>后20胜率</th><th>最差后20日</th></tr></thead><tbody>" +
+ TDT.map(r=>`<tr><td style="text-align:left">${r.t}</td><td class="num nv">${r.n}</td>
+   <td class="num ${cls(r.t5)}">${nfmt(r.t5)}%</td><td class="num nv">${r.w5}%</td>
+   <td class="num ${cls(r.t20)}"><b>${nfmt(r.t20)}%</b></td><td class="num nv">${r.w20}%</td>
+   <td class="num ${cls(r.lo)}">${nfmt(r.lo,1)}%</td></tr>`).join("") + "</tbody>";
+
+/* 表B 定义对比 */
+document.getElementById("tDef").innerHTML =
+ "<thead><tr><th>冰点的定义</th><th>独立事件</th><th>后20日</th><th>后20胜率</th><th>最差后20日</th></tr></thead><tbody>" +
+ TDEF.map(r=>`<tr><td style="text-align:left">${r.name}</td><td class="num nv">${r.n}</td>
+   <td class="num ${cls(r.t20)}"><b>${nfmt(r.t20)}%</b></td><td class="num nv">${r.w20}%</td>
+   <td class="num ${cls(r.lo)}">${nfmt(r.lo,1)}%</td></tr>`).join("") + "</tbody>";
+
+/* 表C 卖点 */
+document.getElementById("tSell").innerHTML =
+ "<thead><tr><th>如果在这一天清仓</th><th>次数</th><th>之后5日</th><th>之后20日</th><th>结论</th></tr></thead><tbody>" +
+ TSELL.map(r=>`<tr><td style="text-align:left">${r.name}</td><td class="num nv">${r.n}</td>
+   <td class="num ${cls(r.r5)}">${nfmt(r.r5)}%</td><td class="num ${cls(r.r20)}"><b>${nfmt(r.r20)}%</b></td>
+   <td style="text-align:left;color:#8e9aab;font-size:12.5px">${r.note}</td></tr>`).join("") + "</tbody>";
+
+/* ---------- 逐日明细 ---------- */
+let PH = "all", Q = "";
+function renderDaily(){
+  const body = document.querySelector("#tDaily tbody");
+  const rows = SEQ.filter(r=>{
+    if(!r.p) return false;
+    if(PH!=="all" && r.p!==PH) return false;
+    if(Q && !r.d.includes(Q)) return false;
+    return true;
+  });
+  document.getElementById("cnt").textContent = rows.length + " 天";
+  body.innerHTML = rows.slice().reverse().map(r=>`<tr>
+    <td>${r.d}</td>
+    <td style="text-align:left"><span class="dot" style="background:${PC[r.p]}"></span>${r.pn}</td>
+    <td class="num nv">${r.s===null?"—":r.s.toFixed(0)}</td>
+    <td class="num ${r.z>=100?'pos':''}">${r.z}</td>
+    <td class="num ${r.dt>=50?'neg':''}">${r.dt}</td>
+    <td class="num nv">${r.sr===null?"—":(r.sr*100).toFixed(0)+"%"}</td>
+    <td class="num nv">${r.mb}</td>
+    <td class="num ${cls(r.pm)}">${r.pm===null?"—":nfmt(r.pm,1)+"%"}</td>
+    <td class="num ${r.bl>500?'neg':''}">${r.bl}</td>
+    <td class="num ${cls(r.r)}">${nfmt(r.r)}%</td>
+    <td class="num nv">${r.e}</td>
+    <td class="num nv">${r.ix||"—"}</td>
+    <td class="num ${cls(r.f5)}">${r.f5===null?"—":nfmt(r.f5,1)+"%"}</td>
+    <td class="num ${cls(r.f10)}">${r.f10===null?"—":nfmt(r.f10,1)+"%"}</td></tr>`).join("");
+}
+renderDaily();
+document.querySelectorAll("[data-ph]").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("[data-ph]").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on"); PH=b.dataset.ph; renderDaily();
+});
+document.getElementById("q").oninput = e => { Q = e.target.value.trim(); renderDaily(); };
+document.getElementById("csv").onclick = () => {
+  const head = ["日期","阶段","温度","涨停","跌停","炸板","封板率","最高板","涨停溢价%","大面","上涨占比","等权涨幅%","等权指数","上证","后5日%","后10日%"];
+  const rows = SEQ.filter(r=>r.p).map(r=>[r.d,r.pn,r.s,r.z,r.dt,r.zb,
+    r.sr===null?"":(r.sr*100).toFixed(1),r.mb,r.pm===null?"":r.pm,r.bl,
+    r.bd===null?"":(r.bd*100).toFixed(1),r.r,r.e,r.ix,r.f5===null?"":r.f5,r.f10===null?"":r.f10]);
+  const csv = "\ufeff" + [head, ...rows].map(a=>a.join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download = "情绪周期_逐日指标.csv"; a.click();
+};
+
+/* ---------- 图 ---------- */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const tip = document.getElementById("tip");
+let view = SEQ.filter(r=>r.p);
+let hover = -1, showMark = true;
+
+function resize(){
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w*dpr; cv.height = h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+const PADL = 54, PADR = 14;
+const Y1 = 18, Y2 = 300;      // 主图
+const Y3 = 336, Y4 = 436;     // 温度
+const Y5 = 450, Y6 = 468;     // 色带
+
+function draw(){
+  const W = cv.clientWidth, H = cv.clientHeight, n = view.length;
+  ctx.clearRect(0,0,W,H);
+  if(n<2) return;
+  const x = i => PADL + (W-PADL-PADR) * (i/(n-1));
+
+  const vals = view.map(r=>r.e).filter(v=>v!==null);
+  let mn = Math.min(...vals), mx = Math.max(...vals);
+  const pad = (mx-mn)*0.08; mn-=pad; mx+=pad;
+  const y = val => Y2 - (val-mn)/(mx-mn)*(Y2-Y1);
+
+  // 网格 + y 轴
+  ctx.font = "11px -apple-system,sans-serif"; ctx.fillStyle="#5f6b7c"; ctx.textAlign="right";
+  for(let k=0;k<=4;k++){
+    const v = mn + (mx-mn)*k/4, yy = y(v);
+    ctx.strokeStyle="#1a212c"; ctx.beginPath(); ctx.moveTo(PADL,yy); ctx.lineTo(W-PADR,yy); ctx.stroke();
+    ctx.fillText(Math.round(v), PADL-8, yy+4);
+  }
+  ctx.textAlign="left"; ctx.fillStyle="#4a5568"; ctx.font="11px -apple-system,sans-serif";
+  ctx.fillText("全市场等权指数（基点 1000）", PADL+2, 11);
+
+  // 主图面积 + 线
+  const g = ctx.createLinearGradient(0,Y1,0,Y2);
+  g.addColorStop(0,"rgba(224,75,58,0.16)"); g.addColorStop(1,"rgba(224,75,58,0)");
+  ctx.beginPath(); ctx.moveTo(x(0), y(view[0].e));
+  view.forEach((r,i)=>{ if(r.e!==null) ctx.lineTo(x(i), y(r.e)); });
+  ctx.lineTo(x(n-1), Y2); ctx.lineTo(x(0), Y2); ctx.closePath();
+  ctx.fillStyle=g; ctx.fill();
+  ctx.beginPath();
+  view.forEach((r,i)=>{ if(r.e!==null){ i?ctx.lineTo(x(i),y(r.e)):ctx.moveTo(x(i),y(r.e)); } });
+  ctx.strokeStyle="#e0604a"; ctx.lineWidth=1.6; ctx.stroke();
+
+  // 温度
+  ctx.textAlign="left"; ctx.fillStyle="#6b7788";
+  ctx.fillText("情绪温度", PADL+2, Y3-10);
+  ctx.textAlign="right"; ctx.fillStyle="#3f4c5e";
+  ctx.fillText("灰线＝当日原始值　　白线＝EMA5 平滑（阶段判定用这条）", W-PADR, Y3-10);
+  [20,40,60,80].forEach(t=>{
+    const yy = Y4 - t/100*(Y4-Y3);
+    ctx.strokeStyle = t===80? "#4a2a26" : t===20? "#22334a" : "#1a212c";
+    ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(PADL,yy); ctx.lineTo(W-PADR,yy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle="#4a5568"; ctx.textAlign="right"; ctx.fillText(t, PADL-8, yy+3);
+  });
+
+  const g2 = ctx.createLinearGradient(0,Y3,0,Y4);
+  g2.addColorStop(0,"rgba(224,75,58,0.30)"); g2.addColorStop(1,"rgba(59,110,165,0.22)");
+  ctx.beginPath(); ctx.moveTo(x(0), Y4);
+  view.forEach((r,i)=>{ if(r.s!==null) ctx.lineTo(x(i), Y4 - r.s/100*(Y4-Y3)); });
+  ctx.lineTo(x(n-1), Y4); ctx.closePath(); ctx.fillStyle=g2; ctx.fill();
+  ctx.beginPath();
+  view.forEach((r,i)=>{ if(r.s!==null){ i?ctx.lineTo(x(i), Y4-r.s/100*(Y4-Y3)):ctx.moveTo(x(i),Y4-r.s/100*(Y4-Y3)); } });
+  ctx.strokeStyle="rgba(159,176,198,0.35)"; ctx.lineWidth=0.8; ctx.stroke();
+  // 平滑线（EMA5）：趋势以它为准，原始值只是抖动
+  ctx.beginPath();
+  view.forEach((r,i)=>{ const vv=r.se!==null?r.se:r.s; if(vv!==null){ i?ctx.lineTo(x(i), Y4-vv/100*(Y4-Y3)):ctx.moveTo(x(i),Y4-vv/100*(Y4-Y3)); } });
+  ctx.strokeStyle="#e8eef7"; ctx.lineWidth=1.5; ctx.stroke();
+
+  // 阶段色带
+  const step = (W-PADL-PADR)/n;
+  ctx.fillStyle="#11161f"; ctx.fillRect(PADL, Y5, W-PADL-PADR, Y6-Y5);
+  view.forEach((r,i)=>{ if(r.p){ ctx.fillStyle=PC[r.p]; ctx.fillRect(PADL+i*step, Y5, Math.ceil(step)+0.5, Y6-Y5); } });
+  ctx.font="10.5px -apple-system,sans-serif"; ctx.fillStyle="#6b7788"; ctx.textAlign="left";
+  ctx.fillText("阶段", 8, Y6-3);
+
+  // x 轴标签
+  const ticks = 6;
+  ctx.textAlign="center"; ctx.fillStyle="#5f6b7c"; ctx.font="11px -apple-system,sans-serif";
+  for(let k=0;k<=ticks;k++){
+    const i = Math.round((n-1)*k/ticks);
+    ctx.textAlign = k===0 ? "left" : (k===ticks ? "right" : "center");
+    ctx.fillText(view[i].d.slice(2), k===ticks? W-PADR : x(i), Y6+18);
+  }
+
+  // 关键标注（相邻日期自动错开高度，避免文字打架）
+  if(showMark){
+    const marks = {"2024-02-05":"微盘崩盘·冰点","2024-09-30":"772家涨停·高潮","2024-10-08":"天量顶","2025-04-07":"关税·冰点"};
+    let lastX = -1e9, row = 0;
+    Object.entries(marks).forEach(([dt,label])=>{
+      const i = view.findIndex(r=>r.d===dt);
+      if(i<0) return;
+      const xx = x(i);
+      row = (xx - lastX < 90) ? row+1 : 0; lastX = xx;
+      const ty = Y1 + 12 + row*13;
+      ctx.strokeStyle="#3a4759"; ctx.setLineDash([2,3]);
+      ctx.beginPath(); ctx.moveTo(xx,Y1+row*13); ctx.lineTo(xx,Y5); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(xx, y(view[i].e), 3, 0, 7); ctx.fillStyle="#e04b3a"; ctx.fill();
+      ctx.fillStyle="#8e9aab"; ctx.font="10.5px -apple-system,sans-serif";
+      ctx.textAlign = xx > W*0.8 ? "right" : "left";
+      ctx.fillText(label, xx + (xx>W*0.8?-6:6), ty);
+    });
+  }
+
+  // hover
+  if(hover>=0 && hover<n){
+    const xx = x(hover);
+    ctx.strokeStyle="#7f8fa6"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(xx,Y1); ctx.lineTo(xx,Y6); ctx.stroke();
+    const r = view[hover];
+    if(r.e!==null){ ctx.beginPath(); ctx.arc(xx,y(r.e),3.5,0,7); ctx.fillStyle="#fff"; ctx.fill(); }
+    if(r.s!==null){ ctx.beginPath(); ctx.arc(xx, Y4-r.s/100*(Y4-Y3),3,0,7); ctx.fillStyle="#fff"; ctx.fill(); }
+  }
+}
+
+cv.addEventListener("mousemove", e=>{
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left, n = view.length;
+  const step = (cv.clientWidth-PADL-PADR)/n;
+  let i = Math.round((mx-PADL)/step-0.5);
+  i = Math.max(0, Math.min(n-1, i));
+  hover = i; draw();
+  const r = view[i];
+  const col = PC[r.p] || "#666";
+  tip.innerHTML = `<b>${r.d}</b><span class="ph" style="color:${col}">${r.pn||"—"}</span>　温度 <b>${r.s===null?"—":r.s.toFixed(0)}</b>
+    <br>涨停 <b style="color:#f2564a">${r.z}</b>　跌停 <b style="color:#16b364">${r.dt}</b>　炸板 ${r.zb}　封板率 ${r.sr===null?"—":(r.sr*100).toFixed(0)+"%"}　最高 ${r.mb} 板
+    <br>昨涨停溢价 <b class="${cls(r.pm)}" style="color:${r.pm>0?'#f2564a':r.pm<0?'#16b364':'#8e9aab'}">${r.pm===null?"—":f2(r.pm)+"%"}</b>　大面 ${r.bl} 家　上涨占比 ${r.bd===null?"—":(r.bd*100).toFixed(0)+"%"}
+    <br>等权 <b class="${cls(r.r)}">${f2(r.r)}%</b>　上证 ${r.ix||"—"} (${f2(r.ip)}%)
+    <br>后 5 日 <b class="${cls(r.f5)}">${r.f5===null?"—":f2(r.f5)+"%"}</b>　后 10 日 <b class="${cls(r.f10)}">${r.f10===null?"—":f2(r.f10)+"%"}</b>`;
+  tip.style.display="block";
+  const tw = tip.offsetWidth, W = cv.clientWidth;
+  let lx = mx + 16; if(lx + tw > W) lx = mx - tw - 16;
+  tip.style.left = lx+"px"; tip.style.top = Math.max(10, e.clientY - rect.top - 30)+"px";
+});
+cv.addEventListener("mouseleave", ()=>{ hover=-1; tip.style.display="none"; draw(); });
+
+document.querySelectorAll("[data-range]").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("[data-range]").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on");
+  const k = b.dataset.range;
+  const all = SEQ.filter(r=>r.p);
+  view = k==="all" ? all : k==="250" ? all.slice(-250) : all.filter(r=>r.d.startsWith(k));
+  hover=-1; draw();
+});
+document.getElementById("mark").onchange = e => { showMark = e.target.checked; draw(); };
+
+/* 温度柱状 */
+(function(){
+  const c = document.getElementById("cvBar"), g = c.getContext("2d");
+  const dpr = window.devicePixelRatio||1;
+  const W = c.clientWidth, H = c.clientHeight;
+  c.width=W*dpr; c.height=H*dpr; g.setTransform(dpr,0,0,dpr,0,0);
+  const vals = T2.map(r=>r.t5);
+  const mx = Math.max(...vals)+0.3, mn = Math.min(...vals)-0.3;
+  const zero = H-28 - (0-mn)/(mx-mn)*(H-52);
+  g.strokeStyle="#2a3444"; g.beginPath(); g.moveTo(24,zero); g.lineTo(W-8,zero); g.stroke();
+  const bw = (W-40)/vals.length;
+  vals.forEach((v,i)=>{
+    const h = (v-mn)/(mx-mn)*(H-52);
+    const top = H-28-h;
+    g.fillStyle = i>=3 ? "#e0604a" : (v>0?"#8a5a54":"#2e7d5b");
+    g.fillRect(28+i*bw, top, bw*0.62, h-zero+ (H-28) - (H-28));
+    g.fillRect(28+i*bw, Math.min(top,zero), bw*0.62, Math.abs(H-28-h-zero));
+    g.fillStyle="#8e9aab"; g.font="11px -apple-system,sans-serif"; g.textAlign="center";
+    g.fillText(T2[i].b, 28+i*bw+bw*0.3, H-10);
+    g.fillStyle="#dbe2ec"; g.font="11.5px -apple-system,sans-serif";
+    g.fillText((v>0?"+":"")+v.toFixed(2)+"%", 28+i*bw+bw*0.3, v>0? top-6 : H-24);
+  });
+})();
+
+/* ---------- 操作手册 ---------- */
+const PLAY = [
+ {k:"FREEZE", name:"冰点", pos:"按跌停家数分三级加：2~3 成 → 5~6 成 → 8 成", signal:[
+   "<b>跌停 ≥60 家</b>（一级）｜<b>≥150 家</b>（二级）｜<b>≥400 家</b>（三级）",
+   "大面股（跌超 7% 未跌停）≥400 家，是跌停家数的补充刻度",
+   "昨涨停溢价 < −3%，昨天的涨停今天闷杀","最高连板 ≤ 4 板，涨停家数 < 50 家"],
+  buy:["<b>跌停 60 家：建底仓 2~3 成</b>。20 次独立事件，后 20 日 +6.86%、胜率 75%",
+   "<b>跌停 150 家：加到 5~6 成</b>。8 次全赚、后 20 日 +13.32%、最差也有 +3.5%——这是全系统赔率最好的位置",
+   "<b>跌停 400 家：打到 8 成</b>。4 次，后 20 日 +15.04%。千股跌停是礼物，一年一两次",
+   "买什么：先买宽基/等权（把仓位加上去），再买跌停潮里逆势翻红、想封板的首板"],
+  no:["<b>一次打满</b>（2024-02 连跌三天才见底，一级二级三级要按顺序加）",
+   "按「温度」判断冰点（温度是相对冷热，会漏掉真正的恐慌；跌停家数是绝对值，骗不了人）",
+   "做 3 天短线（T+5 只有 +3.89%，T+20 才有 +13.32%，这是修复行情不是反弹）"],
+  stat:"按跌停家数：≥60 家 20 次（T+20 +6.86%、胜率 75%）｜≥150 家 8 次（<b>T+20 +13.32%、8 次全赚</b>）｜≥400 家 4 次（T+20 +15.04%）"},
+ {k:"REPAIR", name:"修复", pos:"2~4 成 · 试仓", signal:[
+   "温度 40~55，从冰点回升第 1~3 天","涨停家数从 30 家回到 60~100 家，跌停缩到 20 家以内",
+   "溢价转正 0~3%，封板率回到 65% 以上","市场开始有「新题材」能把 2~3 只股票一起拉板"],
+  buy:["冰点期记录的逆势首板，此时做「第一波」——买点在首板次日不高开超过 3%",
+   "低位补涨：选冰点期跌幅 30% 以上、此时放量翻红的","分批建仓，每笔不超过总资金 1 成"],
+  no:["一次满仓（修复期只有 50.9% 的 5 日胜率）","追已经 3 板以上的高位股","频繁换股"],
+  stat:"历史 291 天（占 33%，最常见）｜均温 47.0｜后 5 日 <b>+0.01%</b>，胜率 50.9%｜次日照旧修复 85.1%"},
+ {k:"FERMENT", name:"发酵", pos:"5~7 成 · 主线加仓", signal:[
+   "温度 60~75，连续 3 天以上上升","溢价 > +2%，封板率 > 70%，最高板升到 5 板以上",
+   "主线明确：同一题材连续 3 天有 5 只以上涨停","连板晋级率提升，2 进 3 成功率 > 40%"],
+  buy:["主线龙头，回踩 5 日线不破就加","主线内的低位扩散股（龙头涨 5 板后，同题材低位补涨）","连板晋级：优先 2 进 3、3 进 4 的换手板，避开一字板"],
+  no:["频繁换主线（发酵期最忌讳骑驴找马）","做「杂毛」跟风股（只有在加速段才做）","轻易止盈主升"],
+  stat:"历史 211 天｜均温 62.1｜后 5 日 <b>+0.22%</b>，胜率 46.9%｜后 5 日最差 −19.9%、最好 +32.1%（方差最大）"},
+ {k:"CLIMAX", name:"高潮", pos:"5 成 → 2 成 · 只卖不买", signal:[
+   "温度 > 80，涨停家数分位 > 85%","溢价 > +5%，封板率 > 70%，最高板创阶段新高",
+   "涨停家数单日 > 100 家，甚至 200 家以上","成交额放大到 20 日均量的 1.3 倍以上"],
+  buy:["<b>不加仓，但也别当天清光。</b>高潮当天清仓，之后 5 日还能再涨 +0.98%、20 日 +1.81%",
+   "先卖后排跟风与一字板，龙头留到「转分歧」那天再走（转分歧后 20 日 −2.13%）",
+   "用移动止盈代替一次性清仓：跌破前一日最低价减一半"],
+  no:["高潮当天下午追涨停（最容易站岗的位置）","相信「这次不一样」","把浮盈加仓回去",
+   "高潮第一天就恐慌清仓（数据说这里是「卖早了」）"],
+  stat:"历史 47 天｜均温 80.3｜后 5 日 <b>+1.19%</b>，胜率 70.2%（最好的一档）｜但最差 −11.2%（2024-10-08 天量顶）｜次日转分歧 21.3%、转退潮 8.5%"},
+ {k:"DIVERGE", name:"分歧", pos:"2~3 成 · 防守", signal:[
+   "温度从高位回落 10 分以上，但仍 > 40","溢价由 +3% 以上掉到 0 附近",
+   "炸板率上升（封板率跌到 60% 以下）","高位板开始出现「烂板」「T 字板」"],
+  buy:["只留最强主线龙头，其余全部清掉","观察承接：高标能放量换手再封板 → 还有二波；直接闷杀 → 立刻走","等分歧转一致的信号（温度重新上 68、溢价回正）再考虑加回"],
+  no:["低吸破位股（分歧期低吸 = 接刀）","补仓摊低成本","同时持有多只高位股"],
+  stat:"历史 142 天｜均温 50.4｜后 5 日 <b>+0.02%</b>，胜率 51.4%｜次日照旧分歧 85.2%（最粘的阶段）｜次日转退潮 10.6%"},
+ {k:"EBB", name:"退潮", pos:"0~2 成 · 撤退", signal:[
+   "溢价 < −3%，跌停家数快速上升","温度 5 日内跌 12 分以上","昨日涨停今天大面积低开低走（核按钮）"],
+  buy:["清仓。不留任何「等反弹再卖」的仓位","只做一个动作：跌透之后的第一个反包（且只用 1 成仓试）","开始记录下一轮冰点的候选股"],
+  no:["抄底","抢反弹（退潮期反弹都是诱多）","补仓"],
+  stat:"历史 131 天｜均温 38.5｜后 5 日 <b>+0.01%</b>，胜率 52.7%｜次日转冰点 7.6%、转修复 18.3%"},
+];
+document.getElementById("playbook").innerHTML = PLAY.map(p=>`
+<div class="play">
+  <div class="h"><span class="dot" style="width:12px;height:12px;background:${PC[p.k]}"></span>
+    <span class="nm" style="color:${PC[p.k]}">${p.name}</span>
+    <span class="pos-pill">${p.pos}</span></div>
+  <div class="body">
+    <div class="blk"><div class="t">盘中怎么认出来（当日可见）</div><ul>${p.signal.map(s=>`<li>${s}</li>`).join("")}</ul>
+      <div class="t" style="margin-top:14px">该做什么</div><ul>${p.buy.map(s=>`<li>${s}</li>`).join("")}</ul></div>
+    <div class="blk"><div class="t">绝对不要做</div><ul>${p.no.map(s=>`<li>${s}</li>`).join("")}</ul></div>
+  </div>
+  <div class="stat"><span class="p">历史数据</span><span>${p.stat}</span></div>
+</div>`).join("");
+
+window.addEventListener("resize", ()=>{ resize(); });
+resize();
+</script>
+</body>
+</html>

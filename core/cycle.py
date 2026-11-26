@@ -98,6 +98,13 @@ def _is_forced(prev, cur, r):
         return True
     if cur == "EBB" and prem <= -5 and dt_p >= 70:
         return True
+    # 冰点/退潮中出现的「涨停潮」= 反弹已开始，不允许被最小驻留压回原阶段。
+    # 否则会出现「225 家涨停、溢价 +7.8%，却仍显示冰点」（实测 2024-04-17）。
+    if cur == "REPAIR" and prev in ("FREEZE", "EBB"):
+        zt = r["zt_count"] if pd.notna(r["zt_count"]) else 0
+        prem = r["prem"] if pd.notna(r["prem"]) else 0.0
+        if zt >= 100 or prem >= 5:
+            return True
     return False
 
 

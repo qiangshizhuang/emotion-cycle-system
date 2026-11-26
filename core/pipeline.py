@@ -26,7 +26,19 @@ def run(start=None, end=None, verbose=True, auto_update=True, budget=None):
     log("① 加载全市场日线 ...")
     daily = fetcher.load(start, end, auto_update=auto_update, budget=budget)
     sl = fetcher.get_stock_list()
-    log(f"    {len(daily):,} 行 / {daily['code'].nunique()} 只，截至 {daily['date'].max()}")
+    last = daily["date"].max()
+    log(f"    {len(daily):,} 行 / {daily['code'].nunique()} 只，截至 {last}")
+
+    # 数据是否落后，直接说出来——否则用户只会看到报告日期没变，不知道是没更新
+    if auto_update:
+        today = time.strftime("%Y-%m-%d")
+        try:
+            miss = max(len(fetcher._trading_days_between(last, today)) - 1, 0)
+        except Exception:
+            miss = max(pd.bdate_range(last, today).size - 1, 0)
+        if miss > 0:
+            log(f"    ⚠ 数据落后 {miss} 个交易日（联网补数据未完成，下次启动会自动重试）")
+            log(f"      如需立即补齐，运行：app.exe --full-update")
 
     log("② 标注涨跌停 / 连板 ...")
     flags = metrics.build_daily_flags(daily, sl)

@@ -189,7 +189,8 @@ def main():
     ap.add_argument("--full", action="store_true", help="强制全量重抓")
     ap.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     ap.add_argument("--selftest", action="store_true", help="只做启动自检，不联网不出报告")
-    ap.add_argument("--version", action="version", version="情绪周期系统 1.0")
+    ap.add_argument("--update-only", action="store_true", help="只把数据补到最新，不出报告")
+    ap.add_argument("--version", action="version", version="情绪周期系统 1.2")
     args = ap.parse_args()
 
     if args.selftest:
@@ -221,6 +222,13 @@ def main():
         if args.full:
             print("[0/3] 强制全量重抓数据（会重新下载全部历史，约 6 分钟）...")
             fetcher.update(args.end, full=True)
+
+        if args.update_only:
+            print("[更新] 只补数据，不生成报告 ...")
+            df = fetcher.update(args.end, budget=600)
+            print(f"\n数据已更新至 {df['date'].max()}，共 {len(df):,} 行")
+            print(f"缓存：{fetcher.DAILY_CACHE}")
+            return
 
         # 有内置快照就不必干等下载；没有才走在线全量
         has_cache = os.path.exists(fetcher.DAILY_CACHE)

@@ -136,23 +136,59 @@ def load_daily(start=None, end=None):
 DAILY_CACHE = os.path.join(CACHE_DIR, "daily_all.parquet")
 
 
+def _guess_trade_day(end):
+    """不依赖任何外部数据的保守推算：退掉周末，盘中不算今天已收盘。"""
+    d = pd.Timestamp(end)
+    today = pd.Timestamp(time.strftime("%Y-%m-%d"))
+    if d >= today and time.strftime("%H:%M") < "15:10":
+        d = today - pd.Timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= pd.Timedelta(days=1)
+    return d.strftime("%Y-%m-%d")
+
+
 def align_trade_day(end):
-    """把 end 对齐到最近一个已收盘的交易日（解决周末/盘前运行白跑的问题）。"""
+    """
+    把 end 对齐到最近一个已收盘的交易日。
+
+    指数日历能识别法定节假日，优先用它；但指数缓存本身可能因为网络问题刷不动，
+    这时如果照它算，就会得出「今天不是交易日」的错误结论，进而永远认为股票库已最新
+    ——曾经就是这个自锁把数据卡死在旧日期。所以指数明显落后时退回自然日推算。
+    """
+    guess = _guess_trade_day(end)
     try:
         from data import index_data
         idx = index_data.load_index("sh000001")
         days = sorted([d for d in idx["date"].tolist() if d <= end])
         if not days:
-            return end
-        last_day = days[-1]
-        # 若 end 就是今天且尚未收盘，退一交易日
-        today = time.strftime("%Y-%m-%d")
-        if end == today and time.strftime("%H:%M") < "15:10":
-            prev = [d for d in days if d < end]
-            return prev[-1] if prev else last_day
-        return last_day
+            return guess
+        last = days[-1]
+        # 指数日历不旧于推算值 → 可信（它能识别节假日，比推算准）
+        if last >= guess:
+            return last
+        # 略有落后（<=3 天）可能是长假，仍信指数；落后太多说明指数没刷新
+        if (pd.Timestamp(guess) - pd.Timestamp(last)).days <= 3:
+            return last
+        return guess
     except Exception:
-        return end
+        return guess
+
+
+def _day_cov(df, day):
+    return int(df.loc[df["date"] == day, "code"].nunique())
+
+
+def _incomplete_days(df, end, full_n, ratio=0.85, lookback=6):
+    """
+    最近 lookback 个交易日里，覆盖股票数不足 full_n*ratio 的日期。
+
+    没有这一步，一次网络超时写入的半截数据会被当成「已完成」，
+    之后 last >= end 直接返回，那个缺口就永远补不上了。
+    """
+    if not len(df):
+        return []
+    days = sorted(df.loc[df["date"] <= end, "date"].unique())[-lookback:]
+    return [d for d in days if _day_cov(df, d) < full_n * ratio]
 
 
 def _trading_days_between(start, end):
@@ -350,44 +386,80 @@ def update(start=None, end=None, workers=None, full=False, budget=None):
     end = align_trade_day(end)
     old = pd.read_parquet(DAILY_CACHE)
     last = old["date"].max()
-    if last >= end:
-        _log(f"缓存已是最新（{last}），无需更新", logf)
-        return old
-
-    from data import snapshot
 
     lst = get_stock_list(use_cache=True)
     codes = lst["code"].tolist()
-    nxt = (pd.Timestamp(last) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-    gap_days = (pd.Timestamp(end) - pd.Timestamp(last)).days
+    full_n = len(codes)
 
-    print(f"  库内数据截至 {last}，需补 {nxt} ~ {end}")
-    _log(f"增量抓取 {nxt} ~ {end}（库内已有至 {last}），股票 {len(codes)} 只", logf)
+    # 要补的日期 = 缺口 + 历史上没写全的日期（自愈：上次超时留下的半截数据也在这里被捞回来）
+    need = set(_incomplete_days(old, end, full_n))
+    if last < end:
+        nxt = (pd.Timestamp(last) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+        need |= set(_trading_days_between(nxt, end))
+    need = sorted(d for d in need if d <= end)
 
-    # 缺口恰好只有一个交易日时，走批量快照：一次请求 500 只，几秒钟完事。
-    # 这是每天收盘后运行的最高频路径——逐只抓要 5223 次请求，差了几百倍。
-    new = pd.DataFrame(columns=KEEP_COLS)
-    missing_days = _trading_days_between(nxt, end)
-    if len(missing_days) == 1:
-        target = missing_days[0]
-        print(f"  走批量快照接口（缺口仅 {target} 一天，通常几秒钟）")
-        new = snapshot.fetch_day(codes, expect_date=target)
-        if len(new):
-            _log(f"批量快照：{len(new)} 只 / {target}", logf)
-        else:
-            print("  快照接口没取到该日数据，改用逐只抓取")
-
-    if len(new) == 0:
-        label = f"补 {nxt} 起 {gap_days} 天" if gap_days < 40 else "补增量"
-        new = _fetch_range(codes, nxt, end, workers, logf, label=label, budget=budget)
-    if len(new) == 0:
-        _log("无新增数据（可能非交易日或网络异常），沿用现有缓存", logf)
+    if not need:
+        _log(f"缓存已是最新（{last}，{_day_cov(old, last):,} 只），无需更新", logf)
         return old
-    df = pd.concat([old, new], ignore_index=True).drop_duplicates(["code", "date"])
-    df = df.sort_values(["code", "date"])
-    df.to_parquet(DAILY_CACHE, index=False)
-    _log(f"完成：新增 {len(df) - len(old):,} 行，总计 {len(df):,} 行，最新 {df['date'].max()}", logf)
-    return df
+
+    print(f"  库内截至 {last}（{_day_cov(old, last):,} 只），需补 {len(need)} 个交易日："
+          f"{need[0]} ~ {need[-1]}")
+
+    from data import snapshot
+    new = pd.DataFrame(columns=KEEP_COLS)
+    today = time.strftime("%Y-%m-%d")
+
+    # 路径 A：只差今天且已收盘 → 批量快照，一次 500 只，十几次请求就完
+    if len(need) == 1 and need[0] == today and snapshot.is_today_close(today):
+        print("  走批量快照（只差今天且已收盘，通常十秒内）")
+        new = snapshot.fetch_day(codes, expect_date=today)
+        if len(new) == 0:
+            print("  快照没取到当日数据，改用 K 线接口")
+
+    # 路径 B：K 线接口按根数取最近若干天。原先的接口每只返回全部历史，
+    # 10 并发只有 13 只/秒，补一天要 400 秒——这才是「数据补不上」的真正原因。
+    if len(new) == 0:
+        from data import sina_kline
+        span = (pd.Timestamp(end) - pd.Timestamp(need[0])).days + 8
+        datalen = int(min(max(span, 10), 60))
+        new, _fail = sina_kline.fetch_recent(
+            codes, datalen=datalen,
+            workers=max(config.FAST_WORKERS, workers),
+            budget=budget, label="补数据")
+        new = new[(new["date"] >= need[0]) & (new["date"] <= end)]
+
+    if len(new) == 0:
+        _log("无新增数据（网络异常或非交易日），沿用现有缓存", logf)
+        return old
+
+    # 覆盖率校验：整日没写全就不写，宁缺毋滥，否则会污染后续所有统计
+    merged = pd.concat([old, new], ignore_index=True).drop_duplicates(["code", "date"], keep="last")
+    ok_days, bad_days = [], []
+    for d in need:
+        cov = _day_cov(merged, d)
+        (ok_days if cov >= full_n * 0.85 else bad_days).append((d, cov))
+
+    if bad_days:
+        bad_list = [d for d, _ in bad_days]
+        new = new[~new["date"].isin(bad_list)]
+        merged = pd.concat([old, new], ignore_index=True).drop_duplicates(["code", "date"], keep="last")
+
+    for d, cov in ok_days:
+        _log(f"  {d}：{cov:,} 只", logf)
+    if bad_days:
+        msg = "、".join(f"{d}({c}只)" for d, c in bad_days)
+        print(f"  ⚠ 数据不全未写入：{msg}")
+        print("    下次启动会自动重试该日期，不影响已完整的交易日。")
+        _log(f"未达标未写入：{msg}", logf)
+
+    if not len(new):
+        _log("本次没有可写入的完整交易日", logf)
+        return old
+
+    merged = merged.sort_values(["code", "date"])
+    merged.to_parquet(DAILY_CACHE, index=False)
+    _log(f"完成：新增 {len(merged) - len(old):,} 行，总计 {len(merged):,} 行，最新 {merged['date'].max()}", logf)
+    return merged
 
 
 def load(start=None, end=None, auto_update=True, budget=None):
