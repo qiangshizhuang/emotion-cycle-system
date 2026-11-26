@@ -149,6 +149,13 @@ def _selftest():
             raise AssertionError("包内没有数据快照，用户首次运行要在线下载 6~8 分钟")
         return "源码模式，无快照（正常）"
 
+    def _fast_api():
+        """增量更新走的 K 线接口。函数内延迟导入，打包时最容易被漏掉。"""
+        from data import sina_kline
+        assert callable(sina_kline.fetch_recent), "sina_kline.fetch_recent 不可用"
+        assert hasattr(sina_kline, "fetch_one"), "sina_kline.fetch_one 不可用"
+        return "增量接口已打包"
+
     def _render():
         from output import charts
         svg = charts.line_chart(["2024-01-01", "2024-01-02"], [([1, 2], "#fff", "t", 2)])
@@ -161,6 +168,7 @@ def _selftest():
     check("parquet 读写", _parquet)
     check("内置数据快照", _seed)
     check("akshare 接口", _akshare)
+    check("增量快速接口", _fast_api)
     check("核心计算链路", _core_logic)
     check("SVG 渲染", _render)
 
